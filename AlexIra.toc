@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: AlexIra
+## Notes: Acompanha os Ecos de selo da Ira Desatada e toca alertas por acúmulo.
+## Author: Alex
+## Version: 0.1.0
+## SavedVariablesPerCharacter: AlexIraDB
+
+Data.lua
+Tracker.lua
+Interface.lua
+Core.lua
