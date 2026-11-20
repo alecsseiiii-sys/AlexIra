@@ -22,13 +22,39 @@ addon.seals = {
 }
 
 local procSound = 23287 -- SOUNDKIT.UI_POWER_AURA_GENERIC
+local mediaPath = "Interface\\AddOns\\AlexIra\\Media\\Sounds\\"
 addon.sounds = {
     { id = 0, name = "Sem som" },
-    { id = procSound, name = "Proc do Choque Sagrado" },
+    { id = procSound, name = "Proc do Choque Sagrado reforçado", file = "ProcChime.ogg" },
+    { id = "proc-native", name = "Proc do Choque Sagrado nativo", kit = procSound },
     { id = 8959, name = "Aviso de raide" },
-    { id = 12867, name = "Alarme" },
+    { id = 12197, name = "Alerta de chefe" },
+    { id = 37666, name = "Sussurro de chefe" },
     { id = 8960, name = "Verificação de prontidão" },
+    { id = 25477, name = "Contagem da batalha" },
     { id = 25478, name = "Início da batalha" },
+    { id = 36609, name = "Fila de batalha de mascotes" },
+    { id = 12867, name = "Alarme" },
+    { id = 18871, name = "Alarme 2" },
+    { id = 12889, name = "Alarme 3" },
+    { id = 3175, name = "Ping do mapa" },
+    { id = 23404, name = "Missão concluída" },
+    { id = 31578, name = "Saque épico" },
+    { id = 31581, name = "Recompensa extra" },
+    { id = 28814, name = "Armadilha pronta" },
+    { id = 43936, name = "Progresso de missão" },
+    { id = 18019, name = "Notificação da Battle.net" },
+    { id = 880, name = "Convite para grupo" },
+    { id = 829, name = "Abrir grimório" },
+    { id = 120, name = "Moedas" },
+    { id = "rubber-duck", name = "Pato de borracha", file = "RubberDuck.ogg" },
+    { id = "clown-horn", name = "Buzina de palhaço", file = "ClownHorn.ogg" },
+    { id = "boing", name = "Boing", file = "Boing.ogg" },
+    { id = "chicken", name = "Galinha surpresa", file = "Chicken.ogg" },
+    { id = "cartoon-fail", name = "Falha de desenho animado", file = "CartoonFail.ogg" },
+    { id = "coin-8-bit", name = "Moeda de 8 bits", file = "Coin8Bit.ogg" },
+    { id = "holy-bell", name = "Sino da Luz", file = "HolyBell.ogg" },
+    { id = "trumpet", name = "Trombeta da vitória", file = "Trumpet.ogg" },
 }
 
 local soundByID, sealByCast, sealByEcho = {}, {}, {}
@@ -72,8 +98,14 @@ function addon.InitializeSettings()
 end
 
 function addon.PlayAlert(seal, count)
-    local sound = addon.db.sounds[seal.echo][count]
-    if sound > 0 then
-        return PlaySound(sound, "Master")
+    local id = addon.db.sounds[seal.echo][count]
+    local sound = soundByID[id]
+    if not sound or id == 0 then return end
+
+    local kit = sound.kit or (type(id) == "number" and id)
+    local played = kit and PlaySound(kit, "Master")
+    if sound.file then
+        return PlaySoundFile(mediaPath .. sound.file, "Master") or played
     end
+    return played
 end
