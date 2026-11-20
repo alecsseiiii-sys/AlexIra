@@ -11,6 +11,7 @@ Indicador de Ira Desatada para paladinos no World of Warcraft: Forever 1.60.1. M
 5. Em **Estilo do indicador**, escolha **Asas Douradas**, **Simples**, **Relicário**, **Vitral Sagrado**, **Fênix Dourada** ou **Martelo da Aurora**. Ajuste **Opacidade do fundo** de **1** (mais transparente) a **10** (opaco). O fundo cinza começa em **6**. O menu mostra uma prévia silenciosa ao mudar a aparência fora de uma contagem ativa.
 6. A barra **Ataque branco** pisca quando o jogo registra seu ataque de mão principal, mesmo sem um Eco ativo. Ela mostra a previsão do próximo ataque e ajusta o tempo quando a velocidade da arma muda. Para ocultá-la, desmarque **Mostrar timer de ataque branco** em `/alex`.
 7. Para conferir as stacks, marque **Mostrar buff nativo** fora de combate em `/alex`. O ícone do Eco e a contagem desenhada pelo jogo aparecem no alto da tela quando o buff está ativo e o cliente oferece esse visor.
+8. **Priorizar buff no indicador** e **Som de 3 sem espera** vêm ligados e podem ser desligados em `/alex`. A primeira opção escolhe se o indicador dá preferência ao número do buff ou à projeção do ataque. A segunda escolhe se o som toca quando a estimativa chega a três ou aguarda a confirmação ou o fim da janela de verificação.
 
 Por padrão, o alerta de proc do Choque Sagrado toca ao atingir três acúmulos. Os dois primeiros ficam em silêncio. O alerta reforçado combina o som nativo (SoundKit 23287) com um toque original mais audível. O menu também oferece o proc nativo sozinho. Os alertas usam o canal principal do WoW.
 

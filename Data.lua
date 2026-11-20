@@ -105,6 +105,8 @@ function addon.InitializeSettings()
         and math.floor(opacity + 0.5) or 6
     AlexIraDB.showSwingTimer = AlexIraDB.showSwingTimer ~= false
     AlexIraDB.showBuffDisplay = AlexIraDB.showBuffDisplay == true
+    AlexIraDB.preferBuffCount = AlexIraDB.preferBuffCount ~= false
+    AlexIraDB.instantMaxAlert = AlexIraDB.instantMaxAlert ~= false
     AlexIraDB.sounds = type(AlexIraDB.sounds) == "table" and AlexIraDB.sounds or {}
     for echo in pairs(sealByEcho) do
         local choices = AlexIraDB.sounds[echo]

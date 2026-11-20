@@ -289,6 +289,7 @@ function addon.GetSwingProjection(now)
 end
 
 function addon.GetEchoView(now)
+    if not addon.db.preferBuffCount then return addon.GetSwingProjection(now) or tracker end
     if echoSeal then
         local native = ReadEchoNumber()
         local secret = issecretvalue and issecretvalue(native)
@@ -331,7 +332,7 @@ local function RecordSwing(now)
     }
     pendingSwing = swing
     RefreshEcho(nil, true)
-    if not echoReadable and swing.revision == echoRevision and tracker.count ~= addon.maxStacks
+    if addon.db.instantMaxAlert and not echoReadable and swing.revision == echoRevision and tracker.count ~= addon.maxStacks
         and tracker:CountAfterHit(swing.seal, now) == addon.maxStacks then
         swing.alertedMax = true
         addon.PlayAlert(swing.seal, addon.maxStacks)

@@ -367,8 +367,8 @@ local function PreviewAppearance()
 end
 
 local function BuildStyleOption(panel)
-    Label(panel, "GameFontNormal", "Estilo do indicador", 24, -403)
-    local dropdown = Dropdown(panel, 186, 24, -423)
+    Label(panel, "GameFontNormal", "Estilo do indicador", 24, -367)
+    local dropdown = Dropdown(panel, 186, 24, -387)
     dropdown:SetupMenu(function(_, menu)
         for _, style in ipairs(addon.styles) do
             menu:CreateRadio(style.name, function(id)
@@ -384,12 +384,12 @@ local function BuildStyleOption(panel)
 end
 
 local function BuildOpacityOption(panel)
-    Label(panel, "GameFontNormal", "Opacidade do fundo", 234, -403)
-    Label(panel, "GameFontHighlightSmall", "1 mais transparente, 10 opaco", 234, -449)
-    local valueLabel = Label(panel, "GameFontHighlight", "", 385, -427)
+    Label(panel, "GameFontNormal", "Opacidade do fundo", 234, -367)
+    Label(panel, "GameFontHighlightSmall", "1 mais transparente, 10 opaco", 234, -413)
+    local valueLabel = Label(panel, "GameFontHighlight", "", 385, -391)
 
     local slider = CreateFrame("Slider", nil, panel)
-    slider:SetPoint("TOPLEFT", 234, -421)
+    slider:SetPoint("TOPLEFT", 234, -385)
     slider:SetSize(137, 22)
     slider:EnableMouse(true)
     slider:SetOrientation("HORIZONTAL")
@@ -459,6 +459,18 @@ function addon.RefreshBuffDisplay()
         buffHost = host
     end
     buffHost:SetShown(addon.db.showBuffDisplay)
+end
+
+local function CheckOption(panel, label, x, y, setting, onChange)
+    local check = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    check:SetPoint("TOPLEFT", x, y)
+    Label(panel, "GameFontHighlight", label, x + 31, y - 10)
+    check:SetChecked(addon.db[setting])
+    check:SetScript("OnClick", function(self)
+        addon.db[setting] = self:GetChecked() == true
+        if onChange then onChange() end
+    end)
+    return check
 end
 
 local function BuildOptions(isPaladin)
@@ -533,23 +545,18 @@ local function BuildOptions(isPaladin)
     SelectSeal(selectedSeal)
 
     local move = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    move:SetPoint("TOPLEFT", 21, -351)
-    Label(panel, "GameFontHighlight", "Mover indicador", 52, -361)
+    move:SetPoint("TOPLEFT", 21, -327)
+    Label(panel, "GameFontHighlight", "Mover indicador", 52, -337)
     move:SetScript("OnClick", function(self)
         moving = self:GetChecked()
         display:EnableMouse(moving)
         addon.Render()
     end)
-    Button(panel, "Restaurar posição", 146, 180, -355, ResetPosition)
+    Button(panel, "Restaurar posição", 146, 180, -331, ResetPosition)
     BuildStyleOption(panel)
     BuildOpacityOption(panel)
 
-    local timer = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    timer:SetPoint("TOPLEFT", 21, -470)
-    Label(panel, "GameFontHighlight", "Mostrar timer de ataque branco", 52, -480)
-    timer:SetChecked(addon.db.showSwingTimer)
-    timer:SetScript("OnClick", function(self)
-        addon.db.showSwingTimer = self:GetChecked() == true
+    CheckOption(panel, "Mostrar timer de ataque branco", 21, -429, "showSwingTimer", function()
         if addon.db.showSwingTimer then
             PreviewAppearance()
         else
@@ -557,14 +564,9 @@ local function BuildOptions(isPaladin)
         end
     end)
     if isPaladin then
-        buffToggle = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-        buffToggle:SetPoint("TOPLEFT", 267, -470)
-        Label(panel, "GameFontHighlight", "Mostrar buff nativo", 299, -480)
-        buffToggle:SetChecked(addon.db.showBuffDisplay)
-        buffToggle:SetScript("OnClick", function(self)
-            addon.db.showBuffDisplay = self:GetChecked() == true
-            addon.RefreshBuffDisplay()
-        end)
+        buffToggle = CheckOption(panel, "Mostrar buff nativo", 267, -429, "showBuffDisplay", addon.RefreshBuffDisplay)
+        CheckOption(panel, "Priorizar buff no indicador", 21, -460, "preferBuffCount", addon.Render)
+        CheckOption(panel, "Som de 3 sem espera", 267, -460, "instantMaxAlert")
     end
     panel:SetScript("OnHide", function()
         moving = false
