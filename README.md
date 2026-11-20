@@ -16,6 +16,10 @@ Os Ecos de Comando, Retidão, Sabedoria, Luz, Justiça e Fúria têm alertas ind
 
 O indicador usa o número nativo do Eco quando o jogo permite exibi-lo. Se os dados da aura estiverem protegidos, as marcações e os alertas podem ser estimados a partir de atualizações do Eco e de acertos físicos. Golpes extras, múltiplos atacantes ou a falta desses eventos podem afetar a estimativa.
 
+## Atualização 0.3.2
+
+O número e as barras usam a aura nativa do WoW quando disponível. Se o AlexIra ainda não tiver identificado o selo, a leitura nativa pode aparecer como **Ira Desatada**. Os sons continuam seguindo os dados de combate que o addon consegue ler. O rastreamento também continua aguardando o acerto físico quando uma esquiva, um aparo ou um erro de Golpe Sagrado ou Julgamento chega junto do ataque branco.
+
 ## Atualizações 0.3.0 e 0.3.1
 
 O contador acompanha a aplicação e a renovação de cada Eco mesmo quando o número de stacks está protegido. A troca de selo preserva a contagem do Eco antigo até o consumo e inicia o novo Eco assim que ele aparece. O modo **Simples** mostra ícone, número e duração. O **Relicário** acende três pedras lado a lado, e o **Vitral Sagrado** acende três painéis de baixo para cima.
