@@ -23,14 +23,14 @@ function tracker:Set(seal, count, expires, estimated, audible)
     end
 end
 
-function tracker:Observe(seal, count, expires, now, refresh, audible)
+function tracker:Observe(seal, count, expires, now, refresh, audible, estimated)
     self:Expire(now)
     if not expires then
         local unchanged = self.seal == seal and self.count == count and not refresh
         expires = unchanged and self.expires or now + addon.echoDuration
     end
-    if self.seal ~= seal or self.count ~= count or self.expires ~= expires or self.estimated then
-        self:Set(seal, count, expires, false, audible)
+    if self.seal ~= seal or self.count ~= count or self.expires ~= expires or self.estimated ~= estimated then
+        self:Set(seal, count, expires, estimated, audible)
         return true
     end
 end

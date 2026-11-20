@@ -4,6 +4,13 @@ addon.maxStacks = 3
 addon.echoDuration = 15
 addon.talent = 1310735
 
+addon.styles = {
+    { id = "wings", name = "Asas Douradas" },
+    { id = "simple", name = "Simples" },
+    { id = "relic", name = "Relicário" },
+    { id = "glass", name = "Vitral Sagrado" },
+}
+
 addon.seals = {
     { spell = 20375, echo = 1311703, name = "Selo do Comando", color = { 1, 0.72, 0.25 },
         ranks = { 20375, 20915, 20918, 20919, 20920 } },
@@ -83,6 +90,14 @@ end
 
 function addon.InitializeSettings()
     AlexIraDB = type(AlexIraDB) == "table" and AlexIraDB or {}
+    local styleID = "wings"
+    for _, style in ipairs(addon.styles) do
+        if style.id == AlexIraDB.indicatorStyle then
+            styleID = style.id
+            break
+        end
+    end
+    AlexIraDB.indicatorStyle = styleID
     local opacity = AlexIraDB.backgroundOpacity
     AlexIraDB.backgroundOpacity = type(opacity) == "number" and opacity >= 1 and opacity <= 10
         and math.floor(opacity + 0.5) or 6

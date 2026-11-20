@@ -9,22 +9,43 @@ local anchors = {
     BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
 }
 
+local layouts = {
+    wings = {
+        width = 366, height = 122, plate = { 166, 86, -7 },
+        icon = { 9, -8, 19 }, title = { 34, -10, 125 }, number = { 76, -28 }, status = { 83, -68 },
+        charges = { x = 11, y = -51, w = 44, h = 9, dx = 50, dy = 0 },
+    },
+    simple = {
+        width = 178, height = 40, plate = { 178, 40, 0 },
+        icon = { 7, -8, 24 }, title = { 37, -5, 99 }, number = { 151, -10 }, status = { 84, -22 },
+    },
+    relic = {
+        width = 187, height = 67, plate = { 187, 67, 0 },
+        icon = { 9, -11, 37 }, title = { 55, -8, 123 }, number = { 147, -27 }, status = { 123, -49 },
+        gilded = true, charges = { x = 55, y = -29, w = 17, h = 15, dx = 21, dy = 0, lead = true },
+    },
+    glass = {
+        width = 142, height = 127, plate = { 142, 127, 0 },
+        icon = { 79, -28, 35 }, title = { 10, -9, 122 }, number = { 96, -69 }, status = { 71, -108 },
+        charges = { x = 18, y = -78, w = 36, h = 20, dx = 0, dy = 24, lead = true },
+    },
+}
+
 local function SealTexture(seal)
     return addon.Public(C_Spell.GetSpellTexture(seal.spell)) or 134400
 end
 
-local function PaintCharges(seal, count)
+local function PaintCharges(face, seal, count)
     local red, green, blue = unpack(seal.color)
     local ready = count == addon.maxStacks
-    display.count:SetText(string.format("%d / %d", count, addon.maxStacks))
     if ready then
-        display.crest:SetBackdropBorderColor(1, 0.78, 0.36)
-        display.count:SetTextColor(1, 0.86, 0.50)
+        face:SetBackdropBorderColor(1, 0.78, 0.36)
+        face.count:SetTextColor(1, 0.86, 0.50)
     else
-        display.crest:SetBackdropBorderColor(0.50, 0.36, 0.19)
-        display.count:SetTextColor(0.97, 0.90, 0.76)
+        face:SetBackdropBorderColor(0.50, 0.36, 0.19)
+        face.count:SetTextColor(0.97, 0.90, 0.76)
     end
-    for index, charge in ipairs(display.charges) do
+    for index, charge in ipairs(face.charges) do
         if index <= count then
             charge.fill:SetColorTexture(red, green, blue, ready and 1 or 0.85)
             charge.shine:SetColorTexture(1, 0.96, 0.82, ready and 0.95 or 0.57)
@@ -39,7 +60,7 @@ function addon.Render()
     if not display then return end
     local tracker, now = addon.tracker, GetTime()
     tracker:Expire(now)
-    if preview and (now >= preview.expires or (preview.background and tracker.seal)) then
+    if preview and (now >= preview.expires or (preview.appearance and tracker.seal)) then
         preview = nil
     end
     local state = preview or (tracker.seal and tracker)
@@ -57,32 +78,41 @@ function addon.Render()
     local seal = state and state.seal or selectedSeal
     local count = state and state.count or 0
     local ready = count == addon.maxStacks
-    local changedSeal = display.spell ~= seal.spell
+    local face = display.face
+    local changedSeal = face.spell ~= seal.spell
     if changedSeal then
-        display.spell = seal.spell
-        display.icon:SetTexture(SealTexture(seal))
-        display.title:SetText(addon.SealName(seal))
+        face.spell = seal.spell
+        face.icon:SetTexture(SealTexture(seal))
+        face.title:SetText(addon.SealName(seal))
     end
-    if changedSeal or display.lastCount ~= count then
-        display.lastCount = count
-        PaintCharges(seal, count)
+    if changedSeal or face.lastCount ~= count then
+        face.lastCount = count
+        PaintCharges(face, seal, count)
         display.readySince = nil
     end
-    if ready then
+    local ok, nativeCount
+    if state == tracker then ok, nativeCount = addon.GetEchoNumber(seal) end
+    if ok and ((issecretvalue and issecretvalue(nativeCount)) or tonumber(nativeCount)) then
+        -- Blizzard's formatted count can be private. The font widget accepts it directly.
+        face.count:SetText(nativeCount)
+    else
+        face.count:SetText(count)
+    end
+    if display.style == "wings" and ready then
         display.readySince = display.readySince or now
         local flash = math.max(0, 1 - (now - display.readySince) / 0.75)
         display.wings:SetAlpha(0.79 + 0.21 * flash)
-    else
+    elseif display.style == "wings" then
         display.wings:SetAlpha(0.30 + 0.16 * count)
     end
     if preview then
-        display.status:SetText(preview.background and "Prévia do fundo" or "Teste de alerta")
+        face.status:SetText(preview.appearance and "Prévia do indicador" or "Teste de alerta")
     elseif state then
         local remaining = math.max(0, state.expires - now)
         local prefix = state.estimated and "Estimativa · " or (ready and "Troque o selo · " or "")
-        display.status:SetText(string.format("%s%.1f s", prefix, remaining))
+        face.status:SetText(string.format("%s%.1f s", prefix, remaining))
     else
-        display.status:SetText("Arraste para mover")
+        face.status:SetText("Arraste para mover")
     end
     display:Show()
 end
@@ -95,7 +125,7 @@ local function Label(parent, style, text, x, y)
 end
 
 local function PaintBackground()
-    display.crest:SetBackdropColor(0.17, 0.18, 0.19, addon.db.backgroundOpacity / 10)
+    display.face:SetBackdropColor(0.17, 0.18, 0.19, addon.db.backgroundOpacity / 10)
 end
 
 local function ResetPosition()
@@ -104,9 +134,86 @@ local function ResetPosition()
     display:SetPoint("CENTER", UIParent, "CENTER", 0, -154)
 end
 
+local function CreateFace(layout)
+    local face = CreateFrame("Frame", nil, display, "BackdropTemplate")
+    local width, height, offset = unpack(layout.plate)
+    face:SetSize(width, height)
+    face:SetPoint("CENTER", 0, offset)
+    face:SetBackdrop({ bgFile = solid, edgeFile = solid, edgeSize = 1 })
+
+    local x, y, size = unpack(layout.icon)
+    face.icon = face:CreateTexture(nil, "ARTWORK")
+    face.icon:SetPoint("TOPLEFT", x, y)
+    face.icon:SetSize(size, size)
+    face.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    if layout.gilded then
+        local setting = face:CreateTexture(nil, "BORDER")
+        setting:SetPoint("TOPLEFT", face.icon, "TOPLEFT", -2, 2)
+        setting:SetPoint("BOTTOMRIGHT", face.icon, "BOTTOMRIGHT", 2, -2)
+        setting:SetColorTexture(0.72, 0.48, 0.20)
+    end
+
+    x, y, width = unpack(layout.title)
+    face.title = Label(face, "GameFontNormal", "", x, y)
+    face.title:SetWidth(width)
+    face.title:SetJustifyH("LEFT")
+    face.title:SetWordWrap(false)
+
+    x, y = unpack(layout.number)
+    face.count = face:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    face.count:SetPoint("TOPRIGHT", face, "TOPLEFT", x, y)
+    local total = face:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    total:SetPoint("LEFT", face.count, "RIGHT", 3, -1)
+    total:SetText("/ " .. addon.maxStacks)
+    face.status = face:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    x, y = unpack(layout.status)
+    face.status:SetPoint("TOP", face, "TOPLEFT", x, y)
+    face.charges = {}
+
+    local cells = layout.charges
+    if cells then
+        for index = 1, addon.maxStacks do
+            local border = face:CreateTexture(nil, "BORDER")
+            border:SetColorTexture(0.37, 0.26, 0.14, 1)
+            border:SetSize(cells.w, cells.h)
+            border:SetPoint("TOPLEFT", cells.x + (index - 1) * cells.dx, cells.y + (index - 1) * cells.dy)
+            local fill = face:CreateTexture(nil, "ARTWORK")
+            fill:SetPoint("TOPLEFT", border, "TOPLEFT", 1, -1)
+            fill:SetPoint("BOTTOMRIGHT", border, "BOTTOMRIGHT", -1, 1)
+            local shine = face:CreateTexture(nil, "OVERLAY")
+            shine:SetPoint("TOPLEFT", fill, "TOPLEFT", 1, 0)
+            shine:SetPoint("TOPRIGHT", fill, "TOPRIGHT", -1, 0)
+            shine:SetHeight(1)
+            if cells.lead then
+                local lead = face:CreateTexture(nil, "OVERLAY")
+                lead:SetColorTexture(0.18, 0.13, 0.08, 0.58)
+                lead:SetPoint("TOP", fill, "TOP", 0, -1)
+                lead:SetPoint("BOTTOM", fill, "BOTTOM", 0, 1)
+                lead:SetWidth(1)
+            end
+            face.charges[index] = { fill = fill, shine = shine }
+        end
+    end
+    return face
+end
+
+local function ApplyStyle()
+    local id = addon.db.indicatorStyle
+    local layout = layouts[id]
+    if display.face then display.face:Hide() end
+    display.style = id
+    display:SetSize(layout.width, layout.height)
+    display.wings:SetShown(id == "wings")
+    display.faces[id] = display.faces[id] or CreateFace(layout)
+    display.face = display.faces[id]
+    display.face:Show()
+    display.readySince = nil
+    PaintBackground()
+end
+
 local function BuildDisplay()
     display = CreateFrame("Frame", "AlexIraDisplay", UIParent)
-    display:SetSize(366, 122)
+    display.faces = {}
     display:SetMovable(true)
     display:SetClampedToScreen(true)
     display:EnableMouse(false)
@@ -132,41 +239,7 @@ local function BuildDisplay()
     display.wings:SetAllPoints(display)
     display.wings:SetTexture(wingTexture)
     display.wings:SetTexCoord(0, 1, 42 / 256, 214 / 256)
-
-    local crest = CreateFrame("Frame", nil, display, "BackdropTemplate")
-    crest:SetSize(166, 86)
-    crest:SetPoint("CENTER", 0, -7)
-    crest:SetBackdrop({ bgFile = solid, edgeFile = solid, edgeSize = 1 })
-    display.crest = crest
-    PaintBackground()
-
-    display.icon = crest:CreateTexture(nil, "ARTWORK")
-    display.icon:SetPoint("TOPLEFT", 9, -8)
-    display.icon:SetSize(19, 19)
-    display.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    display.title = Label(crest, "GameFontNormal", "", 34, -10)
-    display.title:SetWidth(125)
-    display.title:SetJustifyH("LEFT")
-    display.title:SetWordWrap(false)
-    display.count = crest:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-    display.count:SetPoint("TOP", 0, -28)
-    display.status = crest:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    display.status:SetPoint("BOTTOM", 0, 8)
-    display.charges = {}
-    for index = 1, addon.maxStacks do
-        local frame = crest:CreateTexture(nil, "BORDER")
-        frame:SetColorTexture(0.37, 0.26, 0.14, 1)
-        frame:SetSize(44, 9)
-        frame:SetPoint("TOPLEFT", 11 + (index - 1) * 50, -51)
-        local fill = crest:CreateTexture(nil, "ARTWORK")
-        fill:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
-        fill:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
-        local shine = crest:CreateTexture(nil, "OVERLAY")
-        shine:SetPoint("TOPLEFT", fill, "TOPLEFT", 1, 0)
-        shine:SetPoint("TOPRIGHT", fill, "TOPRIGHT", -1, 0)
-        shine:SetHeight(1)
-        display.charges[index] = { fill = fill, shine = shine }
-    end
+    ApplyStyle()
     local accumulated = 0
     display:SetScript("OnUpdate", function(_, elapsed)
         accumulated = accumulated + elapsed
@@ -194,14 +267,38 @@ local function Dropdown(parent, width, x, y)
     return dropdown
 end
 
+local function PreviewAppearance()
+    if not addon.tracker.seal and not moving and (not preview or preview.appearance) then
+        preview = { seal = selectedSeal, count = addon.maxStacks, expires = GetTime() + 4, appearance = true }
+    end
+    addon.Render()
+end
+
+local function BuildStyleOption(panel)
+    Label(panel, "GameFontNormal", "Estilo do indicador", 24, -403)
+    local dropdown = Dropdown(panel, 186, 24, -423)
+    dropdown:SetupMenu(function(_, menu)
+        for _, style in ipairs(addon.styles) do
+            menu:CreateRadio(style.name, function(id)
+                return addon.db.indicatorStyle == id
+            end, function(id)
+                if addon.db.indicatorStyle == id then return end
+                addon.db.indicatorStyle = id
+                ApplyStyle()
+                PreviewAppearance()
+            end, style.id)
+        end
+    end)
+end
+
 local function BuildOpacityOption(panel)
-    Label(panel, "GameFontNormal", "Opacidade do fundo", 24, -403)
-    Label(panel, "GameFontHighlightSmall", "1 mais transparente, 10 opaco", 24, -449)
-    local valueLabel = Label(panel, "GameFontHighlight", "", 253, -427)
+    Label(panel, "GameFontNormal", "Opacidade do fundo", 234, -403)
+    Label(panel, "GameFontHighlightSmall", "1 mais transparente, 10 opaco", 234, -449)
+    local valueLabel = Label(panel, "GameFontHighlight", "", 385, -427)
 
     local slider = CreateFrame("Slider", nil, panel)
-    slider:SetPoint("TOPLEFT", 24, -421)
-    slider:SetSize(212, 22)
+    slider:SetPoint("TOPLEFT", 234, -421)
+    slider:SetSize(137, 22)
     slider:EnableMouse(true)
     slider:SetOrientation("HORIZONTAL")
     slider:SetMinMaxValues(1, 10)
@@ -224,10 +321,7 @@ local function BuildOpacityOption(panel)
         addon.db.backgroundOpacity = value
         valueLabel:SetText(value .. " / 10")
         PaintBackground()
-        if not addon.tracker.seal and not moving and (not preview or preview.background) then
-            preview = { seal = selectedSeal, count = addon.maxStacks, expires = GetTime() + 4, background = true }
-        end
-        addon.Render()
+        PreviewAppearance()
     end)
 end
 
@@ -311,10 +405,11 @@ local function BuildOptions()
         addon.Render()
     end)
     Button(panel, "Restaurar posição", 146, 180, -355, ResetPosition)
+    BuildStyleOption(panel)
     BuildOpacityOption(panel)
     panel:SetScript("OnHide", function()
         moving = false
-        if preview and preview.background then preview = nil end
+        if preview and preview.appearance then preview = nil end
         move:SetChecked(false)
         display:EnableMouse(false)
         addon.Render()
