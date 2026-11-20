@@ -221,6 +221,16 @@ local function SwingWasAvoided(swing)
     return swing.avoidedAt and not HolyAttackNear(swing, swing.avoidedAt + burstGap)
 end
 
+local function SharedTargetFeedback()
+    if IsInGroup and public(IsInGroup()) ~= false then return true end
+    if IsInInstance then
+        local _, instanceType = IsInInstance()
+        instanceType = public(instanceType)
+        return instanceType == "party" or instanceType == "raid"
+    end
+    return false
+end
+
 function addon.GetSwingProjection(now)
     local swing = RecentSwing(now)
     if not swing or swing.finished or swing.revision ~= echoRevision or SwingWasAvoided(swing) then
@@ -235,6 +245,7 @@ local function FinishSwing(swing, now, landed)
     if swing.finished then return end
     swing.finished = true
     if swing.revision ~= echoRevision or SwingWasAvoided(swing) then return end
+    if swing.sharedTarget and RefreshEcho(nil, true) then return end
     local previous = tracker.seal
     tracker:Hit(swing.seal, now, swing.at)
     if landed and previous and previous ~= swing.seal and previous == echoSeal then RetireEcho() end
@@ -254,6 +265,7 @@ local function RecordSwing(swingType)
     local swing = {
         at = now, seal = activeSeal, stored = tracker.seal,
         revision = not seenBeforeSwing and echoRevision or nil,
+        sharedTarget = SharedTargetFeedback(),
     }
     pendingSwing = swing
     RefreshEcho(nil, true)
@@ -264,7 +276,7 @@ local function RecordSwing(swingType)
     end)
     C_Timer.After(feedbackWindow, function()
         if pendingSwing ~= swing or swing.finished then return end
-        RefreshEcho(nil, true)
+        if not swing.sharedTarget then RefreshEcho(nil, true) end
         FinishSwing(swing, GetTime(), false)
         addon.Render()
     end)
@@ -272,15 +284,22 @@ end
 
 local outcomes = { WOUND = true, MISS = true, DODGE = true, PARRY = true }
 local function RecordFeedback(unit, action, school)
-    if not pendingSwing or pendingSwing.finished or pendingSwing.targetChanged
+    local swing = pendingSwing
+    if not swing or swing.finished or swing.targetChanged or swing.sharedTarget
         or public(unit) ~= "target" or public(school) ~= 1 then return end
     action = public(action)
     if not outcomes[action] then return end
-    local swing = pendingSwing
     local now = GetTime()
     local elapsed = now - swing.at
     -- Forever sends the target's hit reaction after the player's swing event.
     if elapsed < 0.25 or elapsed > feedbackWindow then return end
+    -- UNIT_COMBAT names the mob, not its attacker. In shared combat the
+    -- player's own swing and Echo aura are the sources the addon can use.
+    if SharedTargetFeedback() then
+        swing.sharedTarget = true
+        swing.avoidedAt = nil
+        return
+    end
     if action ~= "WOUND" then
         swing.avoidedAt = swing.avoidedAt or now
         return
