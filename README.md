@@ -14,7 +14,11 @@ Por padrão, o alerta de proc do Choque Sagrado toca ao atingir três acúmulos.
 
 Os Ecos de Comando, Retidão, Sabedoria, Luz, Justiça e Fúria têm alertas independentes. O Eco fica visível até ser consumido ou expirar. Ao trocar o selo ativo, o contador continua mostrando o Eco que você armazenou.
 
-O indicador usa o número nativo do Eco quando o jogo permite exibi-lo. Se os dados da aura estiverem protegidos, as marcações e os alertas podem ser estimados a partir de atualizações do Eco e de acertos físicos. Golpes extras, múltiplos atacantes ou a falta desses eventos podem afetar a estimativa.
+O indicador usa o número nativo do Eco quando o jogo permite exibi-lo. Se os dados da aura estiverem protegidos, o ataque branco gera uma estimativa imediata. A aura ou o resultado do golpe podem corrigir a estimativa. O alerta toca após uma confirmação ou quando termina a janela de até 1,25 s sem um resultado conclusivo. Golpes extras, múltiplos atacantes ou a falta de eventos podem afetar o resultado.
+
+## Atualização 0.3.3
+
+O contador projeta as stacks a partir dos próprios ataques brancos, inclusive quando o alvo morre ou muda antes da resposta. A contagem é ajustada se a aura atualizada ou um erro inequívoco do golpe chegar depois. Leituras repetidas de um Eco antigo deixam a estimativa em andamento. Uma esquiva ou um aparo de Golpe Sagrado ou Julgamento pode aparecer junto do ataque branco, então a confirmação mantém os dois eventos separados.
 
 ## Atualizações 0.3.0 e 0.3.1
 

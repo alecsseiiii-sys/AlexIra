@@ -1,12 +1,14 @@
 local addonName, addon = ...
 local public, tracker = addon.Public, addon.tracker
 local activeSeal, sealExpires, sealInstance, echoInstance, echoSeal
-local echoRestricted, echoExpiry
+local echoRestricted, echoExpiry, readableEcho
 local retiredInstances = {}
 local talentKnown, isPaladin, pendingSwing
-local echoRevision, lastEchoSignal = 0, -math.huge
+local echoRevision, lastEchoSignal, lastAuraSignal = 0, -math.huge, -math.huge
 local echoByName, spellNames = {}, {}
 local feedbackWindow, burstGap = 1.25, 0.15
+local holyAttacks = { [1866] = true, [20271] = true, [20467] = true }
+local holyAttackNames, lastHolyAttack = {}, -math.huge
 
 local function Read(getter, ...)
     if getter then
@@ -79,9 +81,13 @@ local function RecentSwing(now)
     end
 end
 
+local function HolyAttackNear(swing, deadline)
+    return lastHolyAttack >= swing.at - burstGap and lastHolyAttack <= deadline
+end
+
 local function AcceptEcho(seal, count, expires, now, refresh, audible, estimated)
     if tracker:Observe(seal, count, expires, now, refresh, audible, estimated) then
-        echoRevision, lastEchoSignal = echoRevision + 1, now
+        echoRevision, lastEchoSignal, lastAuraSignal = echoRevision + 1, now, now
     end
     return true
 end
@@ -94,7 +100,7 @@ local function RetireEcho()
         end
         retiredInstances[echoInstance] = now + addon.echoDuration
     end
-    echoInstance, echoSeal, echoRestricted, echoExpiry = nil, nil, nil, nil
+    echoInstance, echoSeal, echoRestricted, echoExpiry, readableEcho = nil, nil, nil, nil, nil
 end
 
 function addon.GetEchoNumber(seal)
@@ -137,6 +143,13 @@ local function ObserveEcho(aura, seal, change, audible)
     end
     echoRestricted = type(count) ~= "number" or count < 1 or count > addon.maxStacks
     if not echoRestricted then
+        if audible and readableEcho and readableEcho.seal == seal and readableEcho.count == count
+            and (not instance or readableEcho.instance == instance)
+            and (not expires or readableEcho.expires == expires) then
+            -- A repeated snapshot may predate the swing we are reconciling.
+            return true
+        end
+        readableEcho = { seal = seal, count = count, instance = instance, expires = expires }
         return AcceptEcho(seal, count, expires, now, change ~= nil, audible, false)
     end
 
@@ -146,13 +159,18 @@ local function ObserveEcho(aura, seal, change, audible)
     -- An identified new Echo can start a stack even when its applications
     -- field and the melee hit reaction are both restricted.
     if previous == 0 and (change or (fresh and audible and matches)) then
+        if matches then swing.echoObserved = true end
         return AcceptEcho(seal, 1, expires, now, true, audible, true)
     end
     if change == "updated" then
         local uncountedSwing = matches and swing.revision == echoRevision
         local distinctUpdate = not matches and now - lastEchoSignal >= burstGap
             and (expiryAdvanced or not (expires and previousExpiry))
-        if uncountedSwing or distinctUpdate then
+        -- A second timer refresh during a Holy attack can be a separate Echo
+        -- application. A repeat of the same snapshot cannot advance it.
+        local overlappingUpdate = matches and swing.echoObserved and expiryAdvanced and HolyAttackNear(swing, now)
+        if matches then swing.echoObserved = true end
+        if uncountedSwing or distinctUpdate or overlappingUpdate then
             return AcceptEcho(seal, math.min(previous + 1, addon.maxStacks), expires, now, true, audible, true)
         end
     end
@@ -197,26 +215,65 @@ local function RefreshEcho(update, audible)
     return false
 end
 
+local function SwingWasAvoided(swing)
+    -- A failed Holy attack can report physical avoidance just before the
+    -- player's white hit. Treat the avoidance as ambiguous in that case.
+    return swing.avoidedAt and not HolyAttackNear(swing, swing.avoidedAt + burstGap)
+end
+
+function addon.GetSwingProjection(now)
+    local swing = RecentSwing(now)
+    if not swing or swing.finished or swing.revision ~= echoRevision or SwingWasAvoided(swing) then
+        return nil
+    end
+    local count = tracker:CountAfterHit(swing.seal, now)
+    if count == 0 then return {} end
+    return { seal = swing.seal, count = count, expires = swing.at + addon.echoDuration, estimated = true }
+end
+
+local function FinishSwing(swing, now, landed)
+    if swing.finished then return end
+    swing.finished = true
+    if swing.revision ~= echoRevision or SwingWasAvoided(swing) then return end
+    local previous = tracker.seal
+    tracker:Hit(swing.seal, now, swing.at)
+    if landed and previous and previous ~= swing.seal and previous == echoSeal then RetireEcho() end
+    echoRevision, lastEchoSignal = echoRevision + 1, now
+end
+
 local function RecordSwing(swingType)
     if not activeSeal or not talentKnown or GetTime() >= sealExpires then return end
     if issecretvalue and issecretvalue(swingType) then return end
     if swingType ~= nil and swingType ~= Enum.PlayerSwingType.MainHand then return end
     local now = GetTime()
     if pendingSwing and now - pendingSwing.at < burstGap then return end
+    if pendingSwing then FinishSwing(pendingSwing, now, false) end
     tracker:Expire(now)
     -- The Echo event can precede PLAYER_SWING in the same event burst.
-    local seenBeforeSwing = tracker.seal == activeSeal and now - lastEchoSignal < 0.05
-    pendingSwing = {
-        at = now, seal = activeSeal, stored = tracker.seal or echoSeal,
+    local seenBeforeSwing = tracker.seal == activeSeal and now - lastAuraSignal < 0.05
+    local swing = {
+        at = now, seal = activeSeal, stored = tracker.seal,
         revision = not seenBeforeSwing and echoRevision or nil,
     }
-    -- A readable aura can already have arrived when the client signals the swing.
+    pendingSwing = swing
     RefreshEcho(nil, true)
+    C_Timer.After(0.12, function()
+        if pendingSwing ~= swing or swing.finished then return end
+        RefreshEcho(nil, true)
+        addon.Render()
+    end)
+    C_Timer.After(feedbackWindow, function()
+        if pendingSwing ~= swing or swing.finished then return end
+        RefreshEcho(nil, true)
+        FinishSwing(swing, GetTime(), false)
+        addon.Render()
+    end)
 end
 
 local outcomes = { WOUND = true, MISS = true, DODGE = true, PARRY = true }
 local function RecordFeedback(unit, action, school)
-    if not pendingSwing or pendingSwing.feedback or public(unit) ~= "target" or public(school) ~= 1 then return end
+    if not pendingSwing or pendingSwing.finished or pendingSwing.targetChanged
+        or public(unit) ~= "target" or public(school) ~= 1 then return end
     action = public(action)
     if not outcomes[action] then return end
     local swing = pendingSwing
@@ -224,23 +281,22 @@ local function RecordFeedback(unit, action, school)
     local elapsed = now - swing.at
     -- Forever sends the target's hit reaction after the player's swing event.
     if elapsed < 0.25 or elapsed > feedbackWindow then return end
-    swing.feedback = true
-    if action ~= "WOUND" then return end
-    -- Prefer the aura if it is readable. A later UNIT_AURA can reconcile an
-    -- estimate without replaying the alert for the same stack.
-    if not RefreshEcho(nil, true) and swing.revision == echoRevision then
-        local previous = tracker.seal
-        tracker:Hit(swing.seal, now)
-        if previous and previous ~= swing.seal and previous == echoSeal then RetireEcho() end
-        echoRevision, lastEchoSignal = echoRevision + 1, now
+    if action ~= "WOUND" then
+        swing.avoidedAt = swing.avoidedAt or now
+        return
     end
+    if SwingWasAvoided(swing) then return end
+    RefreshEcho(nil, true)
+    FinishSwing(swing, now, true)
 end
 
 local function SyncPlayer()
-    pendingSwing = nil
     RefreshTalent()
     RefreshActiveSeal()
-    if not RefreshEcho(nil, false) and talentKnown == false then
+    local swing = RecentSwing(GetTime())
+    local audible = swing and not swing.finished and swing.revision == echoRevision
+    if not RefreshEcho(nil, audible) and talentKnown == false then
+        pendingSwing = nil
         tracker:Clear()
         RetireEcho()
     end
@@ -262,6 +318,10 @@ frame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_LOGIN" then
         addon.CreateUI()
         if not isPaladin then return end
+        for spell in pairs(holyAttacks) do
+            local name = SpellName(spell)
+            if name then holyAttackNames[name] = true end
+        end
         for _, seal in ipairs(addon.seals) do
             local name = seal.echo and SpellName(seal.echo)
             if name then echoByName[name] = seal end
@@ -279,8 +339,13 @@ frame:SetScript("OnEvent", function(self, event, ...)
         if public(InCombatLockdown()) == false then RefreshActiveSeal() end
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local _, _, spell = ...
-        local seal = addon.sealByCast[public(spell)]
-        if seal then activeSeal, sealExpires, sealInstance = seal, GetTime() + 30, nil end
+        spell = public(spell)
+        local seal = addon.sealByCast[spell]
+        local now = GetTime()
+        if seal then activeSeal, sealExpires, sealInstance = seal, now + 30, nil end
+        if spell and (holyAttacks[spell] or holyAttackNames[SpellName(spell)]) then
+            lastHolyAttack = now
+        end
     elseif event == "PLAYER_SWING" then
         local _, swingType = ...
         RecordSwing(swingType)
@@ -288,12 +353,14 @@ frame:SetScript("OnEvent", function(self, event, ...)
         local unit, action, _, _, school = ...
         RecordFeedback(unit, action, school)
     elseif event == "PLAYER_TARGET_CHANGED" then
-        pendingSwing = nil
+        if pendingSwing then pendingSwing.targetChanged = true end
     elseif event == "PLAYER_DEAD" then
         pendingSwing, activeSeal, sealExpires, sealInstance = nil, nil, nil, nil
         RetireEcho()
         tracker:Clear()
     elseif event == "PLAYER_ENTERING_WORLD" then
+        pendingSwing, lastHolyAttack = nil, -math.huge
+        lastEchoSignal, lastAuraSignal = -math.huge, -math.huge
         activeSeal, sealExpires, sealInstance = nil, nil, nil
         RetireEcho()
         retiredInstances = {}

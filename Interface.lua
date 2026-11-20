@@ -60,10 +60,11 @@ function addon.Render()
     if not display then return end
     local tracker, now = addon.tracker, GetTime()
     tracker:Expire(now)
-    if preview and (now >= preview.expires or (preview.appearance and tracker.seal)) then
+    local live = addon.GetSwingProjection(now) or tracker
+    if preview and (now >= preview.expires or (preview.appearance and live.seal)) then
         preview = nil
     end
-    local state = preview or (tracker.seal and tracker)
+    local state = preview or (live.seal and live)
     if not state and not moving then
         display.readySince = nil
         display:Hide()
@@ -91,7 +92,7 @@ function addon.Render()
         display.readySince = nil
     end
     local ok, nativeCount
-    if state == tracker then ok, nativeCount = addon.GetEchoNumber(seal) end
+    if state == live then ok, nativeCount = addon.GetEchoNumber(seal) end
     if ok and ((issecretvalue and issecretvalue(nativeCount)) or tonumber(nativeCount)) then
         -- Blizzard's formatted count can be private. The font widget accepts it directly.
         face.count:SetText(nativeCount)

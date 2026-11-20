@@ -30,17 +30,27 @@ function tracker:Observe(seal, count, expires, now, refresh, audible, estimated)
         expires = unchanged and self.expires or now + addon.echoDuration
     end
     if self.seal ~= seal or self.count ~= count or self.expires ~= expires or self.estimated ~= estimated then
+        if self.seal == seal and self.estimated and not estimated and count < self.count then
+            self.highest = math.min(self.highest, count)
+        end
         self:Set(seal, count, expires, estimated, audible)
         return true
     end
 end
 
-function tracker:Hit(seal, now)
+function tracker:CountAfterHit(seal, now)
     self:Expire(now)
-    if self.seal and self.seal ~= seal then
+    if not seal.echo or (self.seal and self.seal ~= seal) then
+        return 0
+    end
+    return math.min((self.count or 0) + 1, addon.maxStacks)
+end
+
+function tracker:Hit(seal, now, startedAt)
+    local count = self:CountAfterHit(seal, now)
+    if count == 0 then
         self:Clear()
-    elseif seal.echo then
-        local count = math.min((self.count or 0) + 1, addon.maxStacks)
-        self:Set(seal, count, now + addon.echoDuration, true, true)
+    else
+        self:Set(seal, count, startedAt + addon.echoDuration, true, true)
     end
 end
