@@ -9,6 +9,8 @@ addon.styles = {
     { id = "simple", name = "Simples" },
     { id = "relic", name = "Relicário" },
     { id = "glass", name = "Vitral Sagrado" },
+    { id = "phoenix", name = "Fênix Dourada" },
+    { id = "hammer", name = "Martelo da Aurora" },
 }
 
 addon.seals = {
@@ -102,6 +104,7 @@ function addon.InitializeSettings()
     AlexIraDB.backgroundOpacity = type(opacity) == "number" and opacity >= 1 and opacity <= 10
         and math.floor(opacity + 0.5) or 6
     AlexIraDB.showSwingTimer = AlexIraDB.showSwingTimer ~= false
+    AlexIraDB.showBuffDisplay = AlexIraDB.showBuffDisplay == true
     AlexIraDB.sounds = type(AlexIraDB.sounds) == "table" and AlexIraDB.sounds or {}
     for echo in pairs(sealByEcho) do
         local choices = AlexIraDB.sounds[echo]

@@ -1,9 +1,10 @@
 local _, addon = ...
 
 local display, swingBar, selectedSeal, optionsID, preview
+local buffHost, buffToggle
 local moving = false
 local solid = "Interface\\Buttons\\WHITE8X8"
-local wingTexture = "Interface\\AddOns\\AlexIra\\Media\\Wings.tga"
+local media = "Interface\\AddOns\\AlexIra\\Media\\"
 local anchors = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true, RIGHT = true,
     BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
@@ -12,6 +13,7 @@ local anchors = {
 local layouts = {
     wings = {
         width = 366, height = 122, plate = { 166, 86, -7 },
+        art = "Wings.tga", crop = { 0, 1, 42 / 256, 214 / 256 }, idleAlpha = 0.30,
         icon = { 9, -8, 19 }, title = { 34, -10, 125 }, number = { 76, -28 }, status = { 83, -68 },
         charges = { x = 11, y = -51, w = 44, h = 9, dx = 50, dy = 0 },
     },
@@ -29,13 +31,25 @@ local layouts = {
         icon = { 79, -28, 35 }, title = { 10, -9, 122 }, number = { 96, -69 }, status = { 71, -108 },
         charges = { x = 18, y = -78, w = 36, h = 20, dx = 0, dy = 24, lead = true },
     },
+    phoenix = {
+        width = 356, height = 178, plate = { 174, 68, -12 },
+        art = "Phoenix.tga", idleAlpha = 0.68,
+        icon = { 10, -9, 22 }, title = { 39, -11, 130 }, number = { 139, -29 }, status = { 87, -54 },
+        charges = { x = 10, y = -40, w = 25, h = 8, dx = 29, dy = 0 },
+    },
+    hammer = {
+        width = 326, height = 163, plate = { 232, 59, -20 },
+        art = "DawnHammer.tga", idleAlpha = 0.65,
+        icon = { 14, -13, 28 }, title = { 53, -9, 132 }, number = { 199, -9 }, status = { 123, -42 },
+        charges = { x = 53, y = -26, w = 43, h = 8, dx = 48, dy = 0 },
+    },
 }
 
 local function SealTexture(seal)
     return addon.Public(C_Spell.GetSpellTexture(seal.spell)) or 134400
 end
 
-local function PaintCharges(face, seal, count)
+local function PaintCharges(face, seal, count, nativeOnly)
     local red, green, blue = unpack(seal.color)
     local ready = count == addon.maxStacks
     if ready then
@@ -46,6 +60,7 @@ local function PaintCharges(face, seal, count)
         face.count:SetTextColor(0.97, 0.90, 0.76)
     end
     for index, charge in ipairs(face.charges) do
+        for _, texture in pairs(charge) do texture:SetShown(not nativeOnly) end
         if index <= count then
             charge.fill:SetColorTexture(red, green, blue, ready and 1 or 0.85)
             charge.shine:SetColorTexture(1, 0.96, 0.82, ready and 0.95 or 0.57)
@@ -90,7 +105,7 @@ function addon.Render()
     if not display then return end
     local tracker, now = addon.tracker, GetTime()
     tracker:Expire(now)
-    local live = addon.GetSwingProjection(now) or tracker
+    local live = addon.GetEchoView(now)
     if preview and (now >= preview.expires or (preview.appearance and live.seal)) then
         preview = nil
     end
@@ -109,6 +124,7 @@ function addon.Render()
     end
     local seal = state and state.seal or selectedSeal
     local count = state and state.count or 0
+    local nativeOnly = state and state.nativeOnly == true
     local ready = count == addon.maxStacks
     local face = display.face
     local changedSeal = face.spell ~= seal.spell
@@ -117,31 +133,31 @@ function addon.Render()
         face.icon:SetTexture(SealTexture(seal))
         face.title:SetText(addon.SealName(seal))
     end
-    if changedSeal or face.lastCount ~= count then
+    if changedSeal or face.lastCount ~= count or face.nativeOnly ~= nativeOnly then
         face.lastCount = count
-        PaintCharges(face, seal, count)
+        face.nativeOnly = nativeOnly
+        PaintCharges(face, seal, count, nativeOnly)
         display.readySince = nil
     end
-    local ok, nativeCount
-    if state == live then ok, nativeCount = addon.GetEchoNumber(seal) end
-    if ok and ((issecretvalue and issecretvalue(nativeCount)) or tonumber(nativeCount)) then
-        -- Blizzard's formatted count can be private. The font widget accepts it directly.
-        face.count:SetText(nativeCount)
+    if nativeOnly then
+        -- The font widget accepts the formatted count even when Lua cannot read it.
+        face.count:SetText(state.nativeText)
     else
         face.count:SetText(count)
     end
-    if display.style == "wings" and ready then
+    local layout = layouts[display.style]
+    if layout.art and ready then
         display.readySince = display.readySince or now
         local flash = math.max(0, 1 - (now - display.readySince) / 0.75)
-        display.wings:SetAlpha(0.79 + 0.21 * flash)
-    elseif display.style == "wings" then
-        display.wings:SetAlpha(0.30 + 0.16 * count)
+        display.art:SetAlpha(0.79 + 0.21 * flash)
+    elseif layout.art then
+        display.art:SetAlpha(layout.idleAlpha + (0.79 - layout.idleAlpha) * count / addon.maxStacks)
     end
     if preview then
         face.status:SetText(preview.appearance and "Prévia do indicador" or "Teste de alerta")
     elseif state then
         local remaining = math.max(0, state.expires - now)
-        local prefix = state.estimated and "Estimativa · " or (ready and "Troque o selo · " or "")
+        local prefix = state.estimated and "Estimativa · " or (ready and "Troque o selo · " or "Buff · ")
         face.status:SetText(string.format("%s%.1f s", prefix, remaining))
     else
         face.status:SetText("Arraste para mover")
@@ -218,14 +234,15 @@ local function CreateFace(layout)
             shine:SetPoint("TOPLEFT", fill, "TOPLEFT", 1, 0)
             shine:SetPoint("TOPRIGHT", fill, "TOPRIGHT", -1, 0)
             shine:SetHeight(1)
+            local lead
             if cells.lead then
-                local lead = face:CreateTexture(nil, "OVERLAY")
+                lead = face:CreateTexture(nil, "OVERLAY")
                 lead:SetColorTexture(0.18, 0.13, 0.08, 0.58)
                 lead:SetPoint("TOP", fill, "TOP", 0, -1)
                 lead:SetPoint("BOTTOM", fill, "BOTTOM", 0, 1)
                 lead:SetWidth(1)
             end
-            face.charges[index] = { fill = fill, shine = shine }
+            face.charges[index] = { border = border, fill = fill, shine = shine, lead = lead }
         end
     end
     return face
@@ -237,7 +254,11 @@ local function ApplyStyle()
     if display.face then display.face:Hide() end
     display.style = id
     display:SetSize(layout.width, layout.height)
-    display.wings:SetShown(id == "wings")
+    display.art:SetShown(layout.art ~= nil)
+    if layout.art then
+        display.art:SetTexture(media .. layout.art)
+        display.art:SetTexCoord(unpack(layout.crop or { 0, 1, 0, 1 }))
+    end
     display.faces[id] = display.faces[id] or CreateFace(layout)
     display.face = display.faces[id]
     display.face:Show()
@@ -307,10 +328,8 @@ local function BuildDisplay()
         ResetPosition()
     end
 
-    display.wings = display:CreateTexture(nil, "BACKGROUND")
-    display.wings:SetAllPoints(display)
-    display.wings:SetTexture(wingTexture)
-    display.wings:SetTexCoord(0, 1, 42 / 256, 214 / 256)
+    display.art = display:CreateTexture(nil, "BACKGROUND")
+    display.art:SetAllPoints(display)
     BuildSwingBar()
     ApplyStyle()
     local accumulated = 0
@@ -398,7 +417,51 @@ local function BuildOpacityOption(panel)
     end)
 end
 
-local function BuildOptions()
+local function BuildBuffDisplay(host)
+    if not C_AuraContainerUtil then C_AddOns.LoadAddOn("Blizzard_AuraContainer") end
+    local formatter = C_StringUtil.CreateAbbreviatedNumberFormatter()
+    local spells = {}
+    for id in pairs(addon.sealByEcho) do spells[id] = true end
+    local container = CreateFrame("AuraContainer", nil, host, "CustomAuraContainerTemplate")
+    container:SetAllPoints(host)
+    container:SetUnit("player")
+    container:AddAuraSlot("echo", "HELPFUL", {
+        candidateFilters = { includeSpellIDs = spells },
+        initializeFrame = function(button)
+            button:SetSize(76, 28)
+            button:SetPoint("CENTER", container, "CENTER")
+            button:EnableMouse(false)
+            local icon = button:CreateTexture(nil, "ARTWORK")
+            icon:SetPoint("LEFT")
+            icon:SetSize(24, 24)
+            button:SetIcon(icon)
+            local count = Label(button, "GameFontHighlightLarge", "", 32, -5)
+            button:SetApplicationCount(count, { formatter = formatter })
+        end,
+    })
+    container:SetEnabled(true)
+end
+
+function addon.RefreshBuffDisplay()
+    if not buffToggle or (not buffHost and not addon.db.showBuffDisplay)
+        or addon.Public(InCombatLockdown()) ~= false then return end
+    if not buffHost then
+        local host = CreateFrame("Frame", nil, UIParent)
+        host:SetSize(76, 28)
+        host:SetPoint("TOP", UIParent, "TOP", 0, -90)
+        host:Hide()
+        if not pcall(BuildBuffDisplay, host) then
+            addon.db.showBuffDisplay = false
+            buffToggle:SetChecked(false)
+            DEFAULT_CHAT_FRAME:AddMessage("AlexIra: o cliente não disponibilizou o visor nativo do buff.")
+            return
+        end
+        buffHost = host
+    end
+    buffHost:SetShown(addon.db.showBuffDisplay)
+end
+
+local function BuildOptions(isPaladin)
     local panel = CreateFrame("Frame")
     Label(panel, "GameFontNormalHuge", "AlexIra", 24, -22)
     Label(panel, "GameFontHighlight", "Selecione um selo para configurar seus três alertas.", 24, -58)
@@ -493,6 +556,16 @@ local function BuildOptions()
             addon.Render()
         end
     end)
+    if isPaladin then
+        buffToggle = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+        buffToggle:SetPoint("TOPLEFT", 267, -470)
+        Label(panel, "GameFontHighlight", "Mostrar buff nativo", 299, -480)
+        buffToggle:SetChecked(addon.db.showBuffDisplay)
+        buffToggle:SetScript("OnClick", function(self)
+            addon.db.showBuffDisplay = self:GetChecked() == true
+            addon.RefreshBuffDisplay()
+        end)
+    end
     panel:SetScript("OnHide", function()
         moving = false
         if preview and preview.appearance then preview = nil end
@@ -506,10 +579,11 @@ local function BuildOptions()
     optionsID = category:GetID()
 end
 
-function addon.CreateUI()
+function addon.CreateUI(isPaladin)
     selectedSeal = addon.seals[1]
     BuildDisplay()
-    BuildOptions()
+    BuildOptions(isPaladin)
+    addon.RefreshBuffDisplay()
     SLASH_ALEXIRA1 = "/alex"
     SLASH_ALEXIRA2 = "/alexira"
     SlashCmdList.ALEXIRA = function() Settings.OpenToCategory(optionsID) end

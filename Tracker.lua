@@ -46,11 +46,11 @@ function tracker:CountAfterHit(seal, now)
     return math.min((self.count or 0) + 1, addon.maxStacks)
 end
 
-function tracker:Hit(seal, now, startedAt)
+function tracker:Hit(seal, now, startedAt, audible)
     local count = self:CountAfterHit(seal, now)
     if count == 0 then
         self:Clear()
     else
-        self:Set(seal, count, startedAt + addon.echoDuration, true, true)
+        self:Set(seal, count, startedAt + addon.echoDuration, true, audible)
     end
 end

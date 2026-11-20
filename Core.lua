@@ -1,7 +1,7 @@
 local addonName, addon = ...
 local public, tracker = addon.Public, addon.tracker
 local activeSeal, sealExpires, sealInstance, echoInstance, echoSeal
-local echoRestricted, echoExpiry, readableEcho
+local echoExpiry, echoSeenAt, echoReadable, readableEcho
 local retiredInstances = {}
 local talentKnown, isPaladin, pendingSwing
 local echoRevision, lastEchoSignal, lastAuraSignal = 0, -math.huge, -math.huge
@@ -113,6 +113,8 @@ local function HolyAttackNear(swing, deadline)
 end
 
 local function AcceptEcho(seal, count, expires, now, refresh, audible, estimated)
+    local swing = RecentSwing(now)
+    if count == addon.maxStacks and swing and swing.seal == seal and swing.alertedMax then audible = false end
     if tracker:Observe(seal, count, expires, now, refresh, audible, estimated) then
         echoRevision, lastEchoSignal, lastAuraSignal = echoRevision + 1, now, now
     end
@@ -127,19 +129,23 @@ local function RetireEcho()
         end
         retiredInstances[echoInstance] = now + addon.echoDuration
     end
-    echoInstance, echoSeal, echoRestricted, echoExpiry, readableEcho = nil, nil, nil, nil, nil
+    echoInstance, echoSeal, echoExpiry, echoSeenAt, echoReadable, readableEcho = nil, nil, nil, nil, nil, nil
 end
 
-function addon.GetEchoNumber(seal)
+local function ReadEchoNumber()
     local displayCount = C_UnitAuras.GetAuraApplicationDisplayCount
-    if echoRestricted and echoInstance and seal == echoSeal and displayCount then
-        return pcall(displayCount, "player", echoInstance, 1, addon.maxStacks)
+    if echoInstance and displayCount then
+        local ok, value = pcall(displayCount, "player", echoInstance, 1, addon.maxStacks)
+        if ok then return value end
     end
-    return false
+end
+
+local function ValidCount(count)
+    return type(count) == "number" and count >= 1 and count <= addon.maxStacks and count % 1 == 0
 end
 
 local function ObserveEcho(aura, seal, change, audible)
-    if not aura then return false end
+    if type(aura) ~= "table" then return false end
     local instance = public(aura.auraInstanceID)
     if instance and retiredInstances[instance] then return false end
     seal = seal or addon.sealByEcho[public(aura.spellId)] or echoByName[public(aura.name)]
@@ -159,18 +165,17 @@ local function ObserveEcho(aura, seal, change, audible)
     local previousExpiry = not fresh and echoExpiry or nil
     local expiryAdvanced = expires and previousExpiry and expires > previousExpiry
     echoInstance = instance or (seal == echoSeal and echoInstance) or nil
-    echoSeal, echoExpiry = seal, expires or previousExpiry
+    echoSeal, echoExpiry, echoSeenAt = seal, expires or previousExpiry, now
     talentKnown = true
 
     local count = public(aura.applications)
-    if not count or count == 0 then
-        local display = echoInstance and Read(C_UnitAuras.GetAuraApplicationDisplayCount,
-            "player", echoInstance, 1, addon.maxStacks)
-        count = display and tonumber(display)
+    if not ValidCount(count) then
+        local text = public(ReadEchoNumber())
+        count = tonumber(text)
     end
-    echoRestricted = type(count) ~= "number" or count < 1 or count > addon.maxStacks
-    if not echoRestricted then
-        if audible and readableEcho and readableEcho.seal == seal and readableEcho.count == count
+    if ValidCount(count) then
+        echoReadable = true
+        if audible and not change and readableEcho and readableEcho.seal == seal and readableEcho.count == count
             and (not instance or readableEcho.instance == instance)
             and (not expires or readableEcho.expires == expires) then
             -- A repeated snapshot may predate the swing we are reconciling.
@@ -205,6 +210,7 @@ local function ObserveEcho(aura, seal, change, audible)
 end
 
 local function RefreshEcho(update, audible)
+    echoReadable = false
     if update then
         for _, instance in ipairs(public(update.removedAuraInstanceIDs) or {}) do
             instance = public(instance)
@@ -239,6 +245,20 @@ local function RefreshEcho(update, audible)
         local aura = ReadNamedAura(spell) or Read(C_UnitAuras.GetPlayerAuraBySpellID, spell)
         if ObserveEcho(aura, seal, nil, audible) then return true end
     end
+    -- Spell-name and ID queries can decline a protected aura. The player buff
+    -- list can still provide public identity fields or a previously known instance.
+    local auras = Read(C_UnitAuras.GetUnitAuras, "player", "HELPFUL")
+    if type(auras) == "table" then
+        for _, aura in ipairs(auras) do
+            if ObserveEcho(public(aura), nil, nil, audible) then return true end
+        end
+    end
+    if echoInstance then
+        local text = public(ReadEchoNumber())
+        if ValidCount(tonumber(text)) then
+            return ObserveEcho({ auraInstanceID = echoInstance }, echoSeal, nil, audible)
+        end
+    end
     return false
 end
 
@@ -268,13 +288,31 @@ function addon.GetSwingProjection(now)
     return { seal = swing.seal, count = count, expires = swing.at + addon.echoDuration, estimated = true }
 end
 
+function addon.GetEchoView(now)
+    if echoSeal then
+        local native = ReadEchoNumber()
+        local secret = issecretvalue and issecretvalue(native)
+        local count
+        if not secret then count = tonumber(native) end
+        if secret or ValidCount(count) then
+            local expires = echoExpiry or (tracker.seal == echoSeal and tracker.expires) or echoSeenAt + addon.echoDuration
+            if expires > now then
+                return { seal = echoSeal, count = count, nativeText = native, nativeOnly = secret, expires = expires }
+            end
+        end
+    end
+    if echoReadable and tracker.seal then return tracker end
+    return addon.GetSwingProjection(now) or tracker
+end
+
 local function FinishSwing(swing, now, landed)
     if swing.finished then return end
     swing.finished = true
     if swing.revision ~= echoRevision or SwingWasAvoided(swing) then return end
     if swing.sharedTarget and RefreshEcho(nil, true) then return end
+    if echoReadable then return end
     local previous = tracker.seal
-    tracker:Hit(swing.seal, now, swing.at)
+    tracker:Hit(swing.seal, now, swing.at, not swing.alertedMax)
     if landed and previous and previous ~= swing.seal and previous == echoSeal then RetireEcho() end
     echoRevision, lastEchoSignal = echoRevision + 1, now
 end
@@ -293,6 +331,11 @@ local function RecordSwing(now)
     }
     pendingSwing = swing
     RefreshEcho(nil, true)
+    if not echoReadable and swing.revision == echoRevision and tracker.count ~= addon.maxStacks
+        and tracker:CountAfterHit(swing.seal, now) == addon.maxStacks then
+        swing.alertedMax = true
+        addon.PlayAlert(swing.seal, addon.maxStacks)
+    end
     C_Timer.After(0.12, function()
         if pendingSwing ~= swing or swing.finished then return end
         RefreshEcho(nil, true)
@@ -359,7 +402,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         return
     end
     if event == "PLAYER_LOGIN" then
-        addon.CreateUI()
+        addon.CreateUI(isPaladin)
         if not isPaladin then return end
         for spell in pairs(holyAttacks) do
             local name = SpellName(spell)
@@ -427,6 +470,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         if public(InCombatLockdown()) == false then SyncPlayer() end
     elseif event == "PLAYER_REGEN_ENABLED" then
         StopSwingTimer()
+        addon.RefreshBuffDisplay()
         SyncPlayer()
     end
     addon.Render()
