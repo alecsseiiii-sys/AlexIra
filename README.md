@@ -9,12 +9,17 @@ Indicador de Ira Desatada para paladinos no World of Warcraft: Forever 1.60.1. M
 3. Clique no selo que quer configurar. Cada selo tem três menus de som independentes, um por acúmulo. Escolha entre 30 opções de som, com efeitos do jogo e sons como **Pato de borracha**, **Buzina de palhaço** e **Boing**, ou ative **Sem som**. Use **Testar** na linha de um acúmulo para ouvir a escolha e ver aquele estado do indicador.
 4. Marque **Mover indicador** para arrastá-lo. As escolhas e a posição são salvas por personagem.
 5. Em **Estilo do indicador**, escolha **Asas Douradas**, **Simples**, **Relicário** ou **Vitral Sagrado**. Ajuste **Opacidade do fundo** de **1** (mais transparente) a **10** (opaco). O fundo cinza começa em **6**. O menu mostra uma prévia silenciosa ao mudar a aparência fora de uma contagem ativa.
+6. A barra **Ataque branco** pisca quando o jogo registra seu ataque de mão principal, mesmo sem um Eco ativo. Ela mostra a previsão do próximo ataque e ajusta o tempo quando a velocidade da arma muda. Para ocultá-la, desmarque **Mostrar timer de ataque branco** em `/alex`.
 
 Por padrão, o alerta de proc do Choque Sagrado toca ao atingir três acúmulos. Os dois primeiros ficam em silêncio. O alerta reforçado combina o som nativo (SoundKit 23287) com um toque original mais audível. O menu também oferece o proc nativo sozinho. Os alertas usam o canal principal do WoW.
 
 Os Ecos de Comando, Retidão, Sabedoria, Luz, Justiça e Fúria têm alertas independentes. O Eco fica visível até ser consumido ou expirar. Ao trocar o selo ativo, o contador continua mostrando o Eco que você armazenou.
 
 O indicador usa o número nativo do Eco quando o jogo permite exibi-lo. Se os dados da aura estiverem protegidos, o ataque branco gera uma estimativa imediata. A aura pode corrigir essa estimativa, assim como o resultado do golpe em combate solo fora de dungeons e raides. O alerta toca após uma confirmação ou quando termina a janela de até 1,25 s sem um resultado conclusivo.
+
+## Atualização 0.3.5
+
+O timer de ataque branco usa o evento do próprio jogador. O piscar indica a tentativa do ataque, que ainda pode errar ou ser aparada. Compare esse sinal com a aura do Eco para investigar diferenças na contagem em grupo.
 
 ## Atualização 0.3.4
 

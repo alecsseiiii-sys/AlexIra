@@ -9,12 +9,39 @@ local echoByName, spellNames = {}, {}
 local feedbackWindow, burstGap = 1.25, 0.15
 local holyAttacks = { [1866] = true, [20271] = true, [20467] = true }
 local holyAttackNames, lastHolyAttack = {}, -math.huge
+local swingTimer = {}
+addon.swingTimer = swingTimer
 
 local function Read(getter, ...)
     if getter then
         local ok, value = pcall(getter, ...)
         if ok then return public(value) end
     end
+end
+
+local function AttackPeriod(value)
+    if type(value) == "number" and value > 0 and value < math.huge then return value end
+end
+
+local function StartSwingTimer(now, duration)
+    local period = AttackPeriod(public(duration)) or AttackPeriod(Read(UnitAttackSpeed, "player"))
+    swingTimer.at = now
+    swingTimer.period = period
+    swingTimer.endsAt = period and now + period
+end
+
+local function UpdateSwingSpeed(now)
+    local endsAt = swingTimer.endsAt
+    if not endsAt or now >= endsAt then return end
+    local period = AttackPeriod(Read(UnitAttackSpeed, "player"))
+    if not period or period == swingTimer.period then return end
+    -- Keep the same fraction of the current swing when weapon speed changes.
+    swingTimer.endsAt = now + (endsAt - now) * period / swingTimer.period
+    swingTimer.period = period
+end
+
+local function StopSwingTimer()
+    swingTimer.period, swingTimer.endsAt = nil, nil
 end
 
 local function SpellName(spell)
@@ -252,11 +279,8 @@ local function FinishSwing(swing, now, landed)
     echoRevision, lastEchoSignal = echoRevision + 1, now
 end
 
-local function RecordSwing(swingType)
-    if not activeSeal or not talentKnown or GetTime() >= sealExpires then return end
-    if issecretvalue and issecretvalue(swingType) then return end
-    if swingType ~= nil and swingType ~= Enum.PlayerSwingType.MainHand then return end
-    local now = GetTime()
+local function RecordSwing(now)
+    if not activeSeal or not talentKnown or now >= sealExpires then return end
     if pendingSwing and now - pendingSwing.at < burstGap then return end
     if pendingSwing then FinishSwing(pendingSwing, now, false) end
     tracker:Expire(now)
@@ -347,8 +371,10 @@ frame:SetScript("OnEvent", function(self, event, ...)
         end
         self:RegisterUnitEvent("UNIT_AURA", "player")
         self:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        if C_EventUtils.IsEventValid("UNIT_ATTACK_SPEED") then self:RegisterUnitEvent("UNIT_ATTACK_SPEED", "player") end
         for _, name in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_TARGET_CHANGED", "PLAYER_REGEN_ENABLED",
-            "PLAYER_DEAD", "PLAYER_SWING", "UNIT_COMBAT", "TRAIT_CONFIG_UPDATED", "PLAYER_TALENT_UPDATE" }) do
+            "PLAYER_DEAD", "PLAYER_LEAVE_COMBAT", "PLAYER_SWING", "UNIT_COMBAT", "TRAIT_CONFIG_UPDATED",
+            "PLAYER_TALENT_UPDATE" }) do
             if C_EventUtils.IsEventValid(name) then self:RegisterEvent(name) end
         end
         C_Timer.After(0.3, SyncPlayer)
@@ -366,18 +392,30 @@ frame:SetScript("OnEvent", function(self, event, ...)
             lastHolyAttack = now
         end
     elseif event == "PLAYER_SWING" then
-        local _, swingType = ...
-        RecordSwing(swingType)
+        local duration, swingType = ...
+        if issecretvalue and issecretvalue(swingType) then return end
+        if swingType ~= nil and swingType ~= Enum.PlayerSwingType.MainHand then return end
+        local now = GetTime()
+        StartSwingTimer(now, duration)
+        RecordSwing(now)
+    elseif event == "UNIT_ATTACK_SPEED" then
+        if public((...)) == "player" then UpdateSwingSpeed(GetTime()) end
+    elseif event == "PLAYER_LEAVE_COMBAT" then
+        StopSwingTimer()
     elseif event == "UNIT_COMBAT" then
         local unit, action, _, _, school = ...
         RecordFeedback(unit, action, school)
     elseif event == "PLAYER_TARGET_CHANGED" then
         if pendingSwing then pendingSwing.targetChanged = true end
     elseif event == "PLAYER_DEAD" then
+        swingTimer.at = nil
+        StopSwingTimer()
         pendingSwing, activeSeal, sealExpires, sealInstance = nil, nil, nil, nil
         RetireEcho()
         tracker:Clear()
     elseif event == "PLAYER_ENTERING_WORLD" then
+        swingTimer.at = nil
+        StopSwingTimer()
         pendingSwing, lastHolyAttack = nil, -math.huge
         lastEchoSignal, lastAuraSignal = -math.huge, -math.huge
         activeSeal, sealExpires, sealInstance = nil, nil, nil
@@ -387,7 +425,8 @@ frame:SetScript("OnEvent", function(self, event, ...)
         SyncPlayer()
     elseif event == "TRAIT_CONFIG_UPDATED" or event == "PLAYER_TALENT_UPDATE" then
         if public(InCombatLockdown()) == false then SyncPlayer() end
-    else
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        StopSwingTimer()
         SyncPlayer()
     end
     addon.Render()

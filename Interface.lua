@@ -1,6 +1,6 @@
 local _, addon = ...
 
-local display, selectedSeal, optionsID, preview
+local display, swingBar, selectedSeal, optionsID, preview
 local moving = false
 local solid = "Interface\\Buttons\\WHITE8X8"
 local wingTexture = "Interface\\AddOns\\AlexIra\\Media\\Wings.tga"
@@ -56,6 +56,36 @@ local function PaintCharges(face, seal, count)
     end
 end
 
+local function RenderSwingTimer(now)
+    local timer = addon.swingTimer
+    local flash = timer.at and now < timer.at + 0.4
+    local counting = timer.endsAt and now < timer.endsAt + 0.4
+    local sample = not flash and not counting and (preview or moving)
+    if not addon.db.showSwingTimer or not (flash or counting or sample) then
+        swingBar:Hide()
+        return
+    end
+
+    local strata = (moving or preview) and "FULLSCREEN_DIALOG" or "MEDIUM"
+    if swingBar.strata ~= strata then
+        swingBar.strata = strata
+        swingBar:SetFrameStrata(strata)
+    end
+    local remaining = counting and math.max(0, timer.endsAt - now)
+    local progress = remaining and math.max(0, 1 - remaining / timer.period)
+    swingBar.progress:SetValue(progress or (sample and 0.55 or 0))
+    swingBar.time:SetText(remaining and string.format("%.1f s", remaining) or (sample and "Prévia" or ""))
+    swingBar.flash:SetShown(flash == true)
+    if flash then
+        swingBar:SetBackdropBorderColor(1, 0.82, 0.4)
+        swingBar.title:SetTextColor(1, 0.86, 0.47)
+    else
+        swingBar:SetBackdropBorderColor(0.48, 0.37, 0.21)
+        swingBar.title:SetTextColor(0.96, 0.90, 0.78)
+    end
+    swingBar:Show()
+end
+
 function addon.Render()
     if not display then return end
     local tracker, now = addon.tracker, GetTime()
@@ -64,6 +94,7 @@ function addon.Render()
     if preview and (now >= preview.expires or (preview.appearance and live.seal)) then
         preview = nil
     end
+    RenderSwingTimer(now)
     local state = preview or (live.seal and live)
     if not state and not moving then
         display.readySince = nil
@@ -126,7 +157,9 @@ local function Label(parent, style, text, x, y)
 end
 
 local function PaintBackground()
-    display.face:SetBackdropColor(0.17, 0.18, 0.19, addon.db.backgroundOpacity / 10)
+    local alpha = addon.db.backgroundOpacity / 10
+    display.face:SetBackdropColor(0.17, 0.18, 0.19, alpha)
+    swingBar:SetBackdropColor(0.17, 0.18, 0.19, alpha)
 end
 
 local function ResetPosition()
@@ -209,7 +242,45 @@ local function ApplyStyle()
     display.face = display.faces[id]
     display.face:Show()
     display.readySince = nil
+    swingBar:SetWidth(layout.plate[1])
+    swingBar:ClearAllPoints()
+    swingBar:SetPoint("TOP", display.face, "BOTTOM", 0, -4)
     PaintBackground()
+end
+
+local function BuildSwingBar()
+    swingBar = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    swingBar:SetHeight(24)
+    swingBar:SetClampedToScreen(true)
+    swingBar:SetBackdrop({ bgFile = solid, edgeFile = solid, edgeSize = 1 })
+    swingBar.title = Label(swingBar, "GameFontHighlightSmall", "Ataque branco", 7, -4)
+    swingBar.time = swingBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    swingBar.time:SetPoint("TOPRIGHT", -7, -4)
+
+    local bar = CreateFrame("StatusBar", nil, swingBar)
+    bar:SetPoint("BOTTOMLEFT", 6, 4)
+    bar:SetPoint("BOTTOMRIGHT", -6, 4)
+    bar:SetHeight(4)
+    bar:SetStatusBarTexture(solid)
+    bar:SetStatusBarColor(0.89, 0.62, 0.26)
+    bar:SetMinMaxValues(0, 1)
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetAllPoints()
+    track:SetColorTexture(0.14, 0.12, 0.10, 0.85)
+    swingBar.flash = bar:CreateTexture(nil, "OVERLAY")
+    swingBar.flash:SetAllPoints()
+    swingBar.flash:SetColorTexture(1, 0.84, 0.46, 1)
+    swingBar.progress = bar
+
+    local accumulated = 0
+    swingBar:SetScript("OnUpdate", function(_, elapsed)
+        accumulated = accumulated + elapsed
+        if accumulated >= 1 / 30 then
+            accumulated = 0
+            RenderSwingTimer(GetTime())
+        end
+    end)
+    swingBar:Hide()
 end
 
 local function BuildDisplay()
@@ -240,6 +311,7 @@ local function BuildDisplay()
     display.wings:SetAllPoints(display)
     display.wings:SetTexture(wingTexture)
     display.wings:SetTexCoord(0, 1, 42 / 256, 214 / 256)
+    BuildSwingBar()
     ApplyStyle()
     local accumulated = 0
     display:SetScript("OnUpdate", function(_, elapsed)
@@ -408,6 +480,19 @@ local function BuildOptions()
     Button(panel, "Restaurar posição", 146, 180, -355, ResetPosition)
     BuildStyleOption(panel)
     BuildOpacityOption(panel)
+
+    local timer = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    timer:SetPoint("TOPLEFT", 21, -470)
+    Label(panel, "GameFontHighlight", "Mostrar timer de ataque branco", 52, -480)
+    timer:SetChecked(addon.db.showSwingTimer)
+    timer:SetScript("OnClick", function(self)
+        addon.db.showSwingTimer = self:GetChecked() == true
+        if addon.db.showSwingTimer then
+            PreviewAppearance()
+        else
+            addon.Render()
+        end
+    end)
     panel:SetScript("OnHide", function()
         moving = false
         if preview and preview.appearance then preview = nil end
