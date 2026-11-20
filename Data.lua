@@ -83,6 +83,9 @@ end
 
 function addon.InitializeSettings()
     AlexIraDB = type(AlexIraDB) == "table" and AlexIraDB or {}
+    local opacity = AlexIraDB.backgroundOpacity
+    AlexIraDB.backgroundOpacity = type(opacity) == "number" and opacity >= 1 and opacity <= 10
+        and math.floor(opacity + 0.5) or 6
     AlexIraDB.sounds = type(AlexIraDB.sounds) == "table" and AlexIraDB.sounds or {}
     for echo in pairs(sealByEcho) do
         local choices = AlexIraDB.sounds[echo]

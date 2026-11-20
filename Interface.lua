@@ -39,7 +39,9 @@ function addon.Render()
     if not display then return end
     local tracker, now = addon.tracker, GetTime()
     tracker:Expire(now)
-    if preview and now >= preview.expires then preview = nil end
+    if preview and (now >= preview.expires or (preview.background and tracker.seal)) then
+        preview = nil
+    end
     local state = preview or (tracker.seal and tracker)
     if not state and not moving then
         display.readySince = nil
@@ -74,7 +76,7 @@ function addon.Render()
         display.wings:SetAlpha(0.30 + 0.16 * count)
     end
     if preview then
-        display.status:SetText("Teste de alerta")
+        display.status:SetText(preview.background and "Prévia do fundo" or "Teste de alerta")
     elseif state then
         local remaining = math.max(0, state.expires - now)
         local prefix = state.estimated and "Estimativa · " or (ready and "Troque o selo · " or "")
@@ -90,6 +92,10 @@ local function Label(parent, style, text, x, y)
     label:SetPoint("TOPLEFT", x, y)
     label:SetText(text)
     return label
+end
+
+local function PaintBackground()
+    display.crest:SetBackdropColor(0.17, 0.18, 0.19, addon.db.backgroundOpacity / 10)
 end
 
 local function ResetPosition()
@@ -131,8 +137,8 @@ local function BuildDisplay()
     crest:SetSize(166, 86)
     crest:SetPoint("CENTER", 0, -7)
     crest:SetBackdrop({ bgFile = solid, edgeFile = solid, edgeSize = 1 })
-    crest:SetBackdropColor(0.052, 0.037, 0.022, 0.98)
     display.crest = crest
+    PaintBackground()
 
     display.icon = crest:CreateTexture(nil, "ARTWORK")
     display.icon:SetPoint("TOPLEFT", 9, -8)
@@ -186,6 +192,43 @@ local function Dropdown(parent, width, x, y)
     dropdown:SetPoint("TOPLEFT", x, y)
     dropdown:SetSize(width, 26)
     return dropdown
+end
+
+local function BuildOpacityOption(panel)
+    Label(panel, "GameFontNormal", "Opacidade do fundo", 24, -403)
+    Label(panel, "GameFontHighlightSmall", "1 mais transparente, 10 opaco", 24, -449)
+    local valueLabel = Label(panel, "GameFontHighlight", "", 253, -427)
+
+    local slider = CreateFrame("Slider", nil, panel)
+    slider:SetPoint("TOPLEFT", 24, -421)
+    slider:SetSize(212, 22)
+    slider:EnableMouse(true)
+    slider:SetOrientation("HORIZONTAL")
+    slider:SetMinMaxValues(1, 10)
+    slider:SetValueStep(1)
+    slider:SetObeyStepOnDrag(true)
+
+    local track = slider:CreateTexture(nil, "BACKGROUND")
+    track:SetPoint("LEFT")
+    track:SetPoint("RIGHT")
+    track:SetHeight(11)
+    track:SetTexture("Interface\\Buttons\\UI-SliderBar-Background")
+    local thumb = slider:CreateTexture(nil, "OVERLAY")
+    thumb:SetSize(26, 26)
+    thumb:SetTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    slider:SetThumbTexture(thumb)
+
+    slider:SetValue(addon.db.backgroundOpacity)
+    valueLabel:SetText(addon.db.backgroundOpacity .. " / 10")
+    slider:SetScript("OnValueChanged", function(_, value)
+        addon.db.backgroundOpacity = value
+        valueLabel:SetText(value .. " / 10")
+        PaintBackground()
+        if not addon.tracker.seal and not moving and (not preview or preview.background) then
+            preview = { seal = selectedSeal, count = addon.maxStacks, expires = GetTime() + 4, background = true }
+        end
+        addon.Render()
+    end)
 end
 
 local function BuildOptions()
@@ -268,8 +311,10 @@ local function BuildOptions()
         addon.Render()
     end)
     Button(panel, "Restaurar posição", 146, 180, -355, ResetPosition)
+    BuildOpacityOption(panel)
     panel:SetScript("OnHide", function()
         moving = false
+        if preview and preview.background then preview = nil end
         move:SetChecked(false)
         display:EnableMouse(false)
         addon.Render()

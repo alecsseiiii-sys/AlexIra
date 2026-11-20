@@ -1,12 +1,11 @@
 local _, addon = ...
 
-local tracker = { revision = 0 }
+local tracker = {}
 addon.tracker = tracker
 
 function tracker:Clear()
     if not self.seal then return end
     self.seal, self.count, self.expires, self.highest, self.estimated = nil, nil, nil, nil, nil
-    self.revision = self.revision + 1
 end
 
 function tracker:Expire(now)
@@ -19,7 +18,6 @@ function tracker:Set(seal, count, expires, estimated, audible)
     local previous = self.seal == seal and self.highest or 0
     self.seal, self.count, self.expires, self.estimated = seal, count, expires, estimated
     self.highest = math.max(previous, count)
-    self.revision = self.revision + 1
     if audible and count > previous then
         addon.PlayAlert(seal, count)
     end
@@ -33,6 +31,7 @@ function tracker:Observe(seal, count, expires, now, refresh, audible)
     end
     if self.seal ~= seal or self.count ~= count or self.expires ~= expires or self.estimated then
         self:Set(seal, count, expires, false, audible)
+        return true
     end
 end
 

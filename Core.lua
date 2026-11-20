@@ -2,8 +2,8 @@ local addonName, addon = ...
 local public, tracker = addon.Public, addon.tracker
 local activeSeal, sealExpires, echoInstance, echoSeal
 local talentKnown, isPaladin, pendingSwing
-local context = 0
-local echoByName = {}
+local echoRevision = 0
+local echoByName, spellNames = {}, {}
 
 local function Read(getter, ...)
     if getter then
@@ -12,8 +12,14 @@ local function Read(getter, ...)
     end
 end
 
+local function SpellName(spell)
+    local name = spellNames[spell] or public(C_Spell.GetSpellName(spell))
+    spellNames[spell] = name
+    return name
+end
+
 local function ReadNamedAura(spell)
-    local name = public(C_Spell.GetSpellName(spell))
+    local name = SpellName(spell)
     return name and Read(C_UnitAuras.GetAuraDataBySpellName, "player", name, "HELPFUL")
 end
 
@@ -70,8 +76,11 @@ local function ObserveEcho(aura, seal, refresh, audible)
         return false
     end
     local now = GetTime()
+    if expires == 0 then expires = nil end
     if expires and expires <= now then return false end
-    tracker:Observe(seal, count, expires, now, refresh, audible)
+    if tracker:Observe(seal, count, expires, now, refresh, audible) then
+        echoRevision = echoRevision + 1
+    end
     return true
 end
 
@@ -81,6 +90,7 @@ local function RefreshEcho(update, audible)
             if echoInstance and public(instance) == echoInstance then
                 if tracker.seal == echoSeal then tracker:Clear() end
                 echoInstance, echoSeal = nil, nil
+                echoRevision = echoRevision + 1
             end
         end
         for _, aura in ipairs(public(update.addedAuras) or {}) do
@@ -110,7 +120,9 @@ local function RecordSwing(swingType)
     if swingType ~= nil and swingType ~= Enum.PlayerSwingType.MainHand then return end
     local now = GetTime()
     if pendingSwing and now - pendingSwing.at < 0.15 then return end
-    pendingSwing = { at = now, seal = activeSeal, revision = tracker.revision, context = context }
+    pendingSwing = { at = now, seal = activeSeal, revision = echoRevision }
+    -- A readable aura can already have arrived when the client signals the swing.
+    RefreshEcho(nil, true)
 end
 
 local outcomes = { WOUND = true, MISS = true, DODGE = true, PARRY = true }
@@ -119,23 +131,20 @@ local function RecordFeedback(unit, action, school)
     action = public(action)
     if not outcomes[action] then return end
     local swing = pendingSwing
-    local elapsed = GetTime() - swing.at
+    local now = GetTime()
+    local elapsed = now - swing.at
     -- Forever sends the target's hit reaction after the player's swing event.
     if elapsed < 0.25 or elapsed > 1.25 then return end
     pendingSwing = nil
     if action ~= "WOUND" then return end
-    C_Timer.After(0.18, function()
-        if swing.context ~= context or not talentKnown then return end
-        -- Let UNIT_AURA arrive first. One swing must never advance both sources.
-        if not RefreshEcho(nil, true) and swing.revision == tracker.revision then
-            tracker:Hit(swing.seal, swing.at + elapsed)
-        end
-        addon.Render()
-    end)
+    -- Prefer the aura if it is readable. A later UNIT_AURA can reconcile an
+    -- estimate without replaying the alert for the same stack.
+    if not RefreshEcho(nil, true) and swing.revision == echoRevision then
+        tracker:Hit(swing.seal, now)
+    end
 end
 
 local function SyncPlayer()
-    context = context + 1
     pendingSwing = nil
     RefreshTalent()
     RefreshActiveSeal()
@@ -162,7 +171,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         addon.CreateUI()
         if not isPaladin then return end
         for _, seal in ipairs(addon.seals) do
-            local name = seal.echo and public(C_Spell.GetSpellName(seal.echo))
+            local name = seal.echo and SpellName(seal.echo)
             if name then echoByName[name] = seal end
         end
         self:RegisterUnitEvent("UNIT_AURA", "player")
@@ -174,8 +183,8 @@ frame:SetScript("OnEvent", function(self, event, ...)
         C_Timer.After(0.3, SyncPlayer)
     elseif event == "UNIT_AURA" then
         local _, update = ...
-        if public(InCombatLockdown()) == false then RefreshActiveSeal() end
         RefreshEcho(public(update), true)
+        if public(InCombatLockdown()) == false then RefreshActiveSeal() end
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local _, _, spell = ...
         local seal = addon.sealByCast[public(spell)]
@@ -189,7 +198,6 @@ frame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_TARGET_CHANGED" then
         pendingSwing = nil
     elseif event == "PLAYER_DEAD" then
-        context = context + 1
         pendingSwing, activeSeal, sealExpires, echoInstance, echoSeal = nil, nil, nil, nil, nil
         tracker:Clear()
     elseif event == "TRAIT_CONFIG_UPDATED" or event == "PLAYER_TALENT_UPDATE" then
