@@ -424,6 +424,7 @@ function addon.CreateUI()
     selectedSeal = addon.seals[1]
     BuildDisplay()
     BuildOptions()
-    SLASH_ALEXIRA1 = "/alexira"
+    SLASH_ALEXIRA1 = "/alex"
+    SLASH_ALEXIRA2 = "/alexira"
     SlashCmdList.ALEXIRA = function() Settings.OpenToCategory(optionsID) end
 end
