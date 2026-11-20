@@ -4,11 +4,8 @@ local activeSeal, sealExpires, sealInstance, echoInstance, echoSeal
 local echoRestricted, echoExpiry
 local retiredInstances = {}
 local talentKnown, isPaladin, pendingSwing
-local lastHolyAttack = -math.huge
 local echoRevision, lastEchoSignal = 0, -math.huge
 local echoByName, spellNames = {}, {}
-local holyAttackSpells = { [1866] = true, [20271] = true, [20467] = true }
-local holyAttackNames = {}
 local feedbackWindow, burstGap = 1.25, 0.15
 
 local function Read(getter, ...)
@@ -227,17 +224,8 @@ local function RecordFeedback(unit, action, school)
     local elapsed = now - swing.at
     -- Forever sends the target's hit reaction after the player's swing event.
     if elapsed < 0.25 or elapsed > feedbackWindow then return end
-    if action ~= "WOUND" then
-        swing.avoidedAt = swing.avoidedAt or now
-        return
-    end
-    -- Avoidance from Holy Strike or Judgement can arrive with physical school
-    -- beside the actual white hit. Only consume a physical WOUND in that burst.
-    if swing.avoidedAt and (lastHolyAttack < swing.at - burstGap
-        or lastHolyAttack > swing.avoidedAt + burstGap) then
-        return
-    end
     swing.feedback = true
+    if action ~= "WOUND" then return end
     -- Prefer the aura if it is readable. A later UNIT_AURA can reconcile an
     -- estimate without replaying the alert for the same stack.
     if not RefreshEcho(nil, true) and swing.revision == echoRevision then
@@ -250,7 +238,6 @@ end
 
 local function SyncPlayer()
     pendingSwing = nil
-    lastHolyAttack = -math.huge
     RefreshTalent()
     RefreshActiveSeal()
     if not RefreshEcho(nil, false) and talentKnown == false then
@@ -273,12 +260,8 @@ frame:SetScript("OnEvent", function(self, event, ...)
         return
     end
     if event == "PLAYER_LOGIN" then
-        addon.CreateUI(isPaladin)
+        addon.CreateUI()
         if not isPaladin then return end
-        for spell in pairs(holyAttackSpells) do
-            local name = SpellName(spell)
-            if name then holyAttackNames[name] = true end
-        end
         for _, seal in ipairs(addon.seals) do
             local name = seal.echo and SpellName(seal.echo)
             if name then echoByName[name] = seal end
@@ -296,12 +279,8 @@ frame:SetScript("OnEvent", function(self, event, ...)
         if public(InCombatLockdown()) == false then RefreshActiveSeal() end
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local _, _, spell = ...
-        spell = public(spell)
-        local seal = addon.sealByCast[spell]
+        local seal = addon.sealByCast[public(spell)]
         if seal then activeSeal, sealExpires, sealInstance = seal, GetTime() + 30, nil end
-        if spell and (holyAttackSpells[spell] or holyAttackNames[SpellName(spell)]) then
-            lastHolyAttack = GetTime()
-        end
     elseif event == "PLAYER_SWING" then
         local _, swingType = ...
         RecordSwing(swingType)
@@ -310,7 +289,6 @@ frame:SetScript("OnEvent", function(self, event, ...)
         RecordFeedback(unit, action, school)
     elseif event == "PLAYER_TARGET_CHANGED" then
         pendingSwing = nil
-        lastHolyAttack = -math.huge
     elseif event == "PLAYER_DEAD" then
         pendingSwing, activeSeal, sealExpires, sealInstance = nil, nil, nil, nil
         RetireEcho()
@@ -323,9 +301,6 @@ frame:SetScript("OnEvent", function(self, event, ...)
         SyncPlayer()
     elseif event == "TRAIT_CONFIG_UPDATED" or event == "PLAYER_TALENT_UPDATE" then
         if public(InCombatLockdown()) == false then SyncPlayer() end
-    elseif event == "PLAYER_REGEN_ENABLED" then
-        addon.PrepareNativeDisplay()
-        SyncPlayer()
     else
         SyncPlayer()
     end

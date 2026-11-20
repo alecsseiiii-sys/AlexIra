@@ -1,10 +1,9 @@
 local _, addon = ...
 
 local display, selectedSeal, optionsID, preview
-local moving, nativeAllowed = false, false
+local moving = false
 local solid = "Interface\\Buttons\\WHITE8X8"
 local wingTexture = "Interface\\AddOns\\AlexIra\\Media\\Wings.tga"
-local unassignedEcho = { spell = addon.talent, name = "Ira Desatada", color = { 1, 0.78, 0.36 } }
 local anchors = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true, RIGHT = true,
     BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
@@ -57,42 +56,6 @@ local function PaintCharges(face, seal, count)
     end
 end
 
-local function RenderCount(face, state, seal, count, native)
-    if face.nativeVisible ~= native then
-        face.nativeVisible = native
-        if face.nativeLayer then face.nativeLayer:SetAlpha(native and 1 or 0) end
-        face.count:SetShown(not native)
-    end
-
-    local bar = face.nativeBar
-    local hideCharges = native and (bar ~= nil or not state or state.estimated == true)
-    if face.chargesHidden ~= hideCharges then
-        face.chargesHidden = hideCharges
-        for _, charge in ipairs(face.charges) do
-            charge.border:SetShown(not hideCharges)
-            charge.fill:SetShown(not hideCharges)
-            charge.shine:SetShown(not hideCharges)
-            if charge.lead then charge.lead:SetShown(not hideCharges) end
-        end
-    end
-    if native then
-        if bar and bar.spell ~= seal.spell then
-            bar.spell = seal.spell
-            bar:SetStatusBarColor(unpack(seal.color))
-        end
-        return true
-    end
-
-    local ok, nativeCount
-    if state == addon.tracker then ok, nativeCount = addon.GetEchoNumber(seal) end
-    if ok and ((issecretvalue and issecretvalue(nativeCount)) or tonumber(nativeCount)) then
-        face.count:SetText(nativeCount)
-    else
-        face.count:SetText(count)
-    end
-    return false
-end
-
 function addon.Render()
     if not display then return end
     local tracker, now = addon.tracker, GetTime()
@@ -101,30 +64,21 @@ function addon.Render()
         preview = nil
     end
     local state = preview or (tracker.seal and tracker)
-    local face = display.face
-    local nativeShown = face.nativeButton and addon.Public(face.nativeButton:IsShown())
-    local nativeOnly = not state and not moving and nativeShown == true
-    if not state and not moving and not nativeOnly then
+    if not state and not moving then
         display.readySince = nil
-        if face.nativeButton then
-            -- Keep the native container live so it can show the next Echo.
-            display:SetAlpha(0)
-            display:Show()
-        else
-            display:Hide()
-        end
+        display:Hide()
         return
     end
-    display:SetAlpha(1)
 
     local strata = (moving or preview) and "FULLSCREEN_DIALOG" or "MEDIUM"
     if display.strata ~= strata then
         display.strata = strata
         display:SetFrameStrata(strata)
     end
-    local seal = state and state.seal or (nativeOnly and unassignedEcho or selectedSeal)
+    local seal = state and state.seal or selectedSeal
     local count = state and state.count or 0
     local ready = count == addon.maxStacks
+    local face = display.face
     local changedSeal = face.spell ~= seal.spell
     if changedSeal then
         face.spell = seal.spell
@@ -136,8 +90,14 @@ function addon.Render()
         PaintCharges(face, seal, count)
         display.readySince = nil
     end
-    local native = nativeOnly or (state == tracker and face.nativeButton and nativeShown ~= false) or false
-    RenderCount(face, state, seal, count, native)
+    local ok, nativeCount
+    if state == tracker then ok, nativeCount = addon.GetEchoNumber(seal) end
+    if ok and ((issecretvalue and issecretvalue(nativeCount)) or tonumber(nativeCount)) then
+        -- Blizzard's formatted count can be private. The font widget accepts it directly.
+        face.count:SetText(nativeCount)
+    else
+        face.count:SetText(count)
+    end
     if display.style == "wings" and ready then
         display.readySince = display.readySince or now
         local flash = math.max(0, 1 - (now - display.readySince) / 0.75)
@@ -149,11 +109,8 @@ function addon.Render()
         face.status:SetText(preview.appearance and "Prévia do indicador" or "Teste de alerta")
     elseif state then
         local remaining = math.max(0, state.expires - now)
-        local prefix = state.estimated and (native and "Tempo estimado · " or "Estimativa · ")
-            or (ready and "Troque o selo · " or "")
+        local prefix = state.estimated and "Estimativa · " or (ready and "Troque o selo · " or "")
         face.status:SetText(string.format("%s%.1f s", prefix, remaining))
-    elseif nativeOnly then
-        face.status:SetText("")
     else
         face.status:SetText("Arraste para mover")
     end
@@ -175,81 +132,6 @@ local function ResetPosition()
     addon.db.position = nil
     display:ClearAllPoints()
     display:SetPoint("CENTER", UIParent, "CENTER", 0, -154)
-end
-
-local function BindNativeBar(button, cells)
-    if not cells or not button.SetApplicationBar then return end
-    local vertical = cells.dy ~= 0
-    local width = cells.w + (addon.maxStacks - 1) * cells.dx
-    local height = cells.h + (addon.maxStacks - 1) * cells.dy
-    local bar = CreateFrame("StatusBar", nil, button)
-    bar:SetPoint("BOTTOMLEFT", button, "TOPLEFT", cells.x, cells.y - cells.h)
-    bar:SetSize(width, height)
-    bar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
-    bar:SetStatusBarTexture(solid)
-    local track = bar:CreateTexture(nil, "BACKGROUND")
-    track:SetAllPoints()
-    track:SetColorTexture(0.15, 0.11, 0.08, 1)
-    for edge = 1, addon.maxStacks - 1 do
-        local divider = bar:CreateTexture(nil, "OVERLAY")
-        divider:SetColorTexture(0.10, 0.075, 0.055, 1)
-        if vertical then
-            divider:SetSize(width, 2)
-            divider:SetPoint("CENTER", bar, "BOTTOM", 0, edge * height / addon.maxStacks)
-        else
-            divider:SetSize(2, height)
-            divider:SetPoint("CENTER", bar, "LEFT", edge * width / addon.maxStacks, 0)
-        end
-    end
-    if pcall(button.SetApplicationBar, button, bar, { maxApplications = addon.maxStacks }) then
-        return bar
-    end
-    bar:Hide()
-end
-
-local function CreateNativeDisplay(face, layout)
-    local formatter = C_StringUtil.CreateNumericRuleFormatter()
-    formatter:SetBreakpoints({
-        { threshold = 0, format = "" },
-        { threshold = 1, format = "%d" },
-        { threshold = addon.maxStacks, format = "|cffffdc80%d|r" },
-    })
-    local echoes = {}
-    for spell in pairs(addon.sealByEcho) do echoes[spell] = true end
-
-    local layer = CreateFrame("Frame", nil, face)
-    layer:SetAllPoints(face)
-    layer:SetAlpha(0)
-    face.nativeLayer = layer
-    local container = CreateFrame("AuraContainer", nil, layer, "CustomAuraContainerTemplate")
-    container:SetAllPoints(layer)
-    container:SetUnit("player")
-    container:AddAuraSlot("alexira-echo", "HELPFUL", {
-        candidateFilters = { includeSpellIDs = echoes },
-        initializeFrame = function(button)
-            button:SetAllPoints(container)
-            button:EnableMouse(false)
-            local digit = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-            digit:SetPoint("TOPRIGHT", button, "TOPLEFT", unpack(layout.number))
-            button:SetApplicationCount(digit, { formatter = formatter })
-            face.nativeBar = BindNativeBar(button, layout.charges)
-            face.nativeButton = button
-        end,
-    })
-    container:SetEnabled(true)
-end
-
-function addon.PrepareNativeDisplay()
-    if not nativeAllowed or not display or addon.Public(InCombatLockdown()) ~= false then return end
-    local face = display.face
-    if face.nativeLayer or not (C_StringUtil and C_StringUtil.CreateNumericRuleFormatter) then return end
-    if not C_AuraContainerUtil and C_AddOns and C_AddOns.LoadAddOn then
-        pcall(C_AddOns.LoadAddOn, "Blizzard_AuraContainer")
-    end
-    if C_AuraContainerUtil and not pcall(CreateNativeDisplay, face, layouts[display.style]) then
-        if face.nativeLayer then face.nativeLayer:SetAlpha(0) end
-        face.nativeButton, face.nativeBar = nil, nil
-    end
 end
 
 local function CreateFace(layout)
@@ -302,15 +184,14 @@ local function CreateFace(layout)
             shine:SetPoint("TOPLEFT", fill, "TOPLEFT", 1, 0)
             shine:SetPoint("TOPRIGHT", fill, "TOPRIGHT", -1, 0)
             shine:SetHeight(1)
-            local lead
             if cells.lead then
-                lead = face:CreateTexture(nil, "OVERLAY")
+                local lead = face:CreateTexture(nil, "OVERLAY")
                 lead:SetColorTexture(0.18, 0.13, 0.08, 0.58)
                 lead:SetPoint("TOP", fill, "TOP", 0, -1)
                 lead:SetPoint("BOTTOM", fill, "BOTTOM", 0, 1)
                 lead:SetWidth(1)
             end
-            face.charges[index] = { border = border, fill = fill, shine = shine, lead = lead }
+            face.charges[index] = { fill = fill, shine = shine }
         end
     end
     return face
@@ -328,7 +209,6 @@ local function ApplyStyle()
     display.face:Show()
     display.readySince = nil
     PaintBackground()
-    addon.PrepareNativeDisplay()
 end
 
 local function BuildDisplay()
@@ -540,8 +420,7 @@ local function BuildOptions()
     optionsID = category:GetID()
 end
 
-function addon.CreateUI(isPaladin)
-    nativeAllowed = isPaladin
+function addon.CreateUI()
     selectedSeal = addon.seals[1]
     BuildDisplay()
     BuildOptions()
