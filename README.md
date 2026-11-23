@@ -12,12 +12,17 @@ Indicador de Ira Desatada para paladinos no World of Warcraft: Forever 1.60.1. M
 6. A barra **Ataque branco** pisca quando o jogo registra seu ataque de mão principal, mesmo sem um Eco ativo. Ela mostra a previsão do próximo ataque e ajusta o tempo quando a velocidade da arma muda. Para ocultá-la, desmarque **Mostrar timer de ataque branco** em `/alex`.
 7. **Buff nativo no indicador** vem ligado. O painel principal usa o mesmo visor do WoW que atualiza o ícone, as stacks e o tempo do Eco no jogador. Para ativar o ícone pequeno no alto da tela, marque **Mostrar buff separado** em `/alex`. As mudanças do visor nativo são aplicadas fora de combate.
 8. **Som de 3 sem espera** escolhe se o som toca quando a estimativa chega a três ou aguarda a confirmação ou o fim da janela de verificação.
+9. Em **Volume dos alertas**, ajuste de **0%** (mudo) a **100%**, em passos de 20%. O controle vale para todos os selos e para **Testar**, e fica salvo por personagem.
 
 Por padrão, o alerta de proc do Choque Sagrado toca ao atingir três acúmulos. Os dois primeiros ficam em silêncio. O alerta reforçado combina o som nativo (SoundKit 23287) com um toque original mais audível. O menu também oferece o proc nativo sozinho. Os alertas usam o canal principal do WoW.
 
 Os Ecos de Comando, Retidão, Sabedoria, Luz, Justiça e Fúria têm alertas independentes. O Eco fica visível até ser consumido ou expirar. Ao trocar o selo ativo, o contador continua mostrando o Eco que você armazenou.
 
 O visor nativo mostra o Eco enquanto a aura estiver ativa, mesmo quando as stacks estão protegidas para o código do addon. Se o visor nativo estiver indisponível ou for desligado, o painel pode mostrar **Estimativa**. Os sons usam a leitura da aura quando disponível para o addon. Com **Som de 3 sem espera** ligado e a leitura protegida, uma esquiva ou um erro pode fazer o som tocar cedo.
+
+## Atualização 0.4.2
+
+O AlexIra ganhou um controle próprio de volume em `/alex`. Os áudios incluídos no addon, como o reforço do proc, ficam mais altos em 100%. Os alertas continuam sujeitos ao volume principal do WoW.
 
 ## Atualização 0.4.1
 

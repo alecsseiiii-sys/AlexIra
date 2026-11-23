@@ -32,6 +32,7 @@ addon.seals = {
 
 local procSound = 23287 -- SOUNDKIT.UI_POWER_AURA_GENERIC
 local mediaPath = "Interface\\AddOns\\AlexIra\\Media\\Sounds\\"
+addon.volumeStep = 20
 addon.sounds = {
     { id = 0, name = "Sem som" },
     { id = procSound, name = "Proc do Choque Sagrado reforçado", file = "ProcChime.ogg" },
@@ -107,6 +108,10 @@ function addon.InitializeSettings()
     AlexIraDB.showBuffDisplay = AlexIraDB.showBuffDisplay == true
     AlexIraDB.preferBuffCount = AlexIraDB.preferBuffCount ~= false
     AlexIraDB.instantMaxAlert = AlexIraDB.instantMaxAlert ~= false
+    local volume = AlexIraDB.alertVolume
+    local step = addon.volumeStep
+    AlexIraDB.alertVolume = type(volume) == "number" and volume >= 0 and volume <= 100
+        and math.floor(volume / step + 0.5) * step or 100
     AlexIraDB.sounds = type(AlexIraDB.sounds) == "table" and AlexIraDB.sounds or {}
     for echo in pairs(sealByEcho) do
         local choices = AlexIraDB.sounds[echo]
@@ -121,15 +126,27 @@ function addon.InitializeSettings()
     addon.db = AlexIraDB
 end
 
+local function PlayKit(kit, volume)
+    if C_Sound and C_Sound.PlaySound then
+        local ok, played = pcall(C_Sound.PlaySound, kit, "Master", false, false, nil, volume / 100)
+        if ok then return played end
+    end
+    return PlaySound(kit, "Master")
+end
+
 function addon.PlayAlert(seal, count)
+    local volume = addon.db.alertVolume
+    if volume == 0 then return end
     local id = addon.db.sounds[seal.echo][count]
     local sound = soundByID[id]
     if not sound or id == 0 then return end
 
     local kit = sound.kit or (type(id) == "number" and id)
-    local played = kit and PlaySound(kit, "Master")
+    local played = kit and PlayKit(kit, volume)
     if sound.file then
-        return PlaySoundFile(mediaPath .. sound.file, "Master") or played
+        -- PlaySoundFile has no gain parameter. Lower levels use pre-scaled audio.
+        local folder = volume < 100 and volume .. "\\" or ""
+        return PlaySoundFile(mediaPath .. folder .. sound.file, "Master") or played
     end
     return played
 end

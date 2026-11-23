@@ -405,18 +405,14 @@ local function BuildStyleOption(panel)
     end)
 end
 
-local function BuildOpacityOption(panel)
-    Label(panel, "GameFontNormal", "Opacidade do fundo", 234, -367)
-    Label(panel, "GameFontHighlightSmall", "1 mais transparente, 10 opaco", 234, -413)
-    local valueLabel = Label(panel, "GameFontHighlight", "", 385, -391)
-
+local function MakeSlider(panel, x, y, width, minimum, maximum, step)
     local slider = CreateFrame("Slider", nil, panel)
-    slider:SetPoint("TOPLEFT", 234, -385)
-    slider:SetSize(137, 22)
+    slider:SetPoint("TOPLEFT", x, y)
+    slider:SetSize(width, 22)
     slider:EnableMouse(true)
     slider:SetOrientation("HORIZONTAL")
-    slider:SetMinMaxValues(1, 10)
-    slider:SetValueStep(1)
+    slider:SetMinMaxValues(minimum, maximum)
+    slider:SetValueStep(step)
     slider:SetObeyStepOnDrag(true)
 
     local track = slider:CreateTexture(nil, "BACKGROUND")
@@ -428,7 +424,14 @@ local function BuildOpacityOption(panel)
     thumb:SetSize(26, 26)
     thumb:SetTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
     slider:SetThumbTexture(thumb)
+    return slider
+end
 
+local function BuildOpacityOption(panel)
+    Label(panel, "GameFontNormal", "Opacidade do fundo", 234, -367)
+    Label(panel, "GameFontHighlightSmall", "1 mais transparente, 10 opaco", 234, -413)
+    local valueLabel = Label(panel, "GameFontHighlight", "", 385, -391)
+    local slider = MakeSlider(panel, 234, -385, 137, 1, 10, 1)
     slider:SetValue(addon.db.backgroundOpacity)
     valueLabel:SetText(addon.db.backgroundOpacity .. " / 10")
     slider:SetScript("OnValueChanged", function(_, value)
@@ -437,6 +440,17 @@ local function BuildOpacityOption(panel)
         PaintBackground()
         addon.RefreshBuffDisplay()
         PreviewAppearance()
+    end)
+end
+
+local function BuildVolumeOption(panel)
+    Label(panel, "GameFontNormal", "Volume dos alertas", 185, -205)
+    local valueLabel = Label(panel, "GameFontHighlight", addon.db.alertVolume .. "%", 386, -205)
+    local slider = MakeSlider(panel, 302, -199, 74, 0, 100, addon.volumeStep)
+    slider:SetValue(addon.db.alertVolume)
+    slider:SetScript("OnValueChanged", function(_, value)
+        addon.db.alertVolume = value
+        valueLabel:SetText(value .. "%")
     end)
 end
 
@@ -597,6 +611,7 @@ local function BuildOptions(isPaladin)
     local panel = CreateFrame("Frame")
     Label(panel, "GameFontNormalHuge", "AlexIra", 24, -22)
     Label(panel, "GameFontHighlight", "Selecione um selo para configurar seus três alertas.", 24, -58)
+    BuildVolumeOption(panel)
 
     local sealButtons, soundMenus = {}, {}
     local sealHeading = Label(panel, "GameFontNormal", "", 24, -205)
