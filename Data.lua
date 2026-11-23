@@ -113,6 +113,8 @@ function addon.InitializeSettings()
     AlexIraDB.showBuffDisplay = AlexIraDB.showBuffDisplay == true
     AlexIraDB.showPrismSeal = AlexIraDB.showPrismSeal ~= false
     AlexIraDB.prismTrafficColors = AlexIraDB.prismTrafficColors ~= false
+    local prismEffect = AlexIraDB.prismEffect
+    AlexIraDB.prismEffect = (prismEffect == "wings" or prismEffect == "none") and prismEffect or "fire"
     AlexIraDB.preferBuffCount = AlexIraDB.preferBuffCount ~= false
     AlexIraDB.instantMaxAlert = AlexIraDB.instantMaxAlert ~= false
     local volume = AlexIraDB.alertVolume

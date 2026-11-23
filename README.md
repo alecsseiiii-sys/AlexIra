@@ -20,6 +20,10 @@ Os Ecos de Comando, Retidão, Sabedoria, Luz, Justiça e Fúria têm alertas ind
 
 O visor nativo mostra o Eco enquanto a aura estiver ativa, mesmo quando as stacks estão protegidas para o código do addon. Se o visor nativo estiver indisponível ou for desligado, o painel pode mostrar **Estimativa**. Os sons usam a leitura da aura quando disponível para o addon. Com **Som de 3 sem espera** ligado e a leitura protegida, uma esquiva ou um erro pode fazer o som tocar cedo.
 
+## Atualização 0.5.2
+
+O **Escudo Prismático** ganha asas em chamas atrás da arte ao chegar a três stacks. Com o escudo selecionado em `/alex`, abra **Estilo do indicador** → **Efeito com 3 stacks** para escolher asas em chamas, asas douradas ou ocultar o efeito. Use **Testar** na linha de três acúmulos para ver a prévia.
+
 ## Atualização 0.5.1
 
 O **Escudo Prismático** mostra o ícone pequeno do selo ao centro. O escudo fica verde com uma stack, amarelo com duas e vermelho com três. Com o estilo selecionado, abra **Estilo do indicador** em `/alex` para ligar ou desligar o ícone e escolher entre as cores de semáforo e a paleta original.

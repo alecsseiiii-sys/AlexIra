@@ -11,6 +11,16 @@ local anchors = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true, RIGHT = true,
     BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
 }
+local prismEffects = {
+    fire = { art = "Phoenix.tga", width = 236, height = 118, tint = { 1, 0.69, 0.44, 0.93 } },
+    wings = { art = "Wings.tga", width = 236, height = 80, tint = { 1, 0.89, 0.62, 1 },
+        crop = { 0, 1, 42 / 256, 214 / 256 } },
+}
+local prismEffectOptions = {
+    { id = "fire", label = "Asas em chamas" },
+    { id = "wings", label = "Asas douradas" },
+    { id = "none", label = "Sem efeito" },
+}
 
 local layouts = {
     wings = {
@@ -48,6 +58,7 @@ local layouts = {
     prism = {
         width = 112, height = 112,
         sealIcon = true,
+        maxStackEffect = true,
         lightStages = {
             { { art = "PrismaticShield.tga", tint = { 0.34, 0.95, 0.39 }, alternateTint = { 0.98, 0.48, 0.24 } } },
             { { art = "PrismaticShield.tga", tint = { 1, 0.83, 0.23 }, alternateTint = { 0.31, 0.75, 1 } } },
@@ -301,6 +312,23 @@ local function CreateLightSealIcon(parent)
     return icon, layer
 end
 
+local function RefreshPrismEffect(texture)
+    local effect = prismEffects[addon.db.prismEffect]
+    texture:SetShown(effect ~= nil)
+    if not effect then return end
+    texture:SetTexture(media .. effect.art)
+    texture:SetSize(effect.width, effect.height)
+    texture:SetTexCoord(unpack(effect.crop or { 0, 1, 0, 1 }))
+    texture:SetVertexColor(unpack(effect.tint))
+end
+
+local function CreatePrismEffect(parent)
+    local texture = parent:CreateTexture(nil, "BACKGROUND")
+    texture:SetPoint("CENTER", parent, "CENTER", 0, 2)
+    RefreshPrismEffect(texture)
+    return texture
+end
+
 local function CreateLightFace(layout)
     local face = CreateFrame("Frame", nil, display)
     face:SetAllPoints(display)
@@ -312,6 +340,9 @@ local function CreateLightFace(layout)
         art:SetFrameLevel(face:GetFrameLevel() + stage)
         DrawLightStage(art, layers, face.lightTints)
         face.lightStages[stage] = art
+        if layout.maxStackEffect and stage == addon.maxStacks then
+            face.prismEffect = CreatePrismEffect(art)
+        end
     end
     if layout.sealIcon then face.sealIcon = CreateLightSealIcon(face) end
     return face
@@ -559,6 +590,17 @@ local function BuildStyleOption(panel)
             end
             AddOption("Ícone do selo no escudo", "showPrismSeal")
             AddOption("Cores de semáforo", "prismTrafficColors")
+            local effects = menu:CreateButton("Efeito com 3 stacks")
+            for _, effect in ipairs(prismEffectOptions) do
+                local option = effects:CreateRadio(effect.label, function(id)
+                    return addon.db.prismEffect == id
+                end, function(id)
+                    addon.db.prismEffect = id
+                    addon.RefreshBuffDisplay()
+                    PreviewAppearance()
+                end, effect.id)
+                option:SetSelectionIgnored()
+            end
         end
     end)
 end
@@ -684,6 +726,7 @@ local function BindLightThreshold(button, layers, stacks, tintUpdates)
     gate:SetStatusBarColor(0, 0, 0, 0)
     DrawLightStage(gate, layers, tintUpdates)
     button:SetApplicationBar(gate, { minApplications = stacks, maxApplications = addon.maxStacks })
+    return gate
 end
 
 local function BuildBuffDisplay(view, layout)
@@ -699,7 +742,8 @@ local function BuildBuffDisplay(view, layout)
             view.hasSecondStage = true
         end, 1)
         AddEchoSlot(view, layout, spells, function(button)
-            BindLightThreshold(button, stages[3], 3, view.lightTints)
+            local gate = BindLightThreshold(button, stages[3], 3, view.lightTints)
+            if layout.maxStackEffect then view.prismEffect = CreatePrismEffect(gate) end
             if layout.sealIcon then
                 local icon, layer = CreateLightSealIcon(button)
                 button:SetIcon(icon)
@@ -764,6 +808,7 @@ end
 
 function addon.RefreshBuffDisplay()
     if display.face.lightTints then RefreshLightTints(display.face.lightTints) end
+    if display.face.prismEffect then RefreshPrismEffect(display.face.prismEffect) end
     if not buffToggle then return end
     if addon.Public(InCombatLockdown()) ~= false then
         addon.Render()
@@ -803,6 +848,7 @@ function addon.RefreshBuffDisplay()
             nativeIndicator.sealIconLayer:SetShown(addon.db.showPrismSeal)
         end
         if nativeIndicator.lightTints then RefreshLightTints(nativeIndicator.lightTints) end
+        if nativeIndicator.prismEffect then RefreshPrismEffect(nativeIndicator.prismEffect) end
         ShowBuffView(nativeIndicator, true)
     end
     addon.Render()
