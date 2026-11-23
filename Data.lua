@@ -11,6 +11,9 @@ addon.styles = {
     { id = "glass", name = "Vitral Sagrado" },
     { id = "phoenix", name = "Fênix Dourada" },
     { id = "hammer", name = "Martelo da Aurora" },
+    { id = "prism", name = "Escudo Prismático" },
+    { id = "lantern", name = "Farol Sagrado" },
+    { id = "constellation", name = "Constelação do Juramento" },
 }
 
 addon.seals = {

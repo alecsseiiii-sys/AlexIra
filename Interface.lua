@@ -1,11 +1,12 @@
 local _, addon = ...
 
 local display, swingBar, selectedSeal, optionsID, preview
-local buffHost, buffToggle, nativeIndicator
+local buffView, buffToggle, nativeIndicator
 local nativeStyles = {}
 local moving = false
 local solid = "Interface\\Buttons\\WHITE8X8"
 local media = "Interface\\AddOns\\AlexIra\\Media\\"
+local starlight = "Interface\\Cooldown\\star4"
 local anchors = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true, RIGHT = true,
     BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
@@ -44,6 +45,34 @@ local layouts = {
         icon = { 14, -13, 28 }, title = { 53, -9, 132 }, number = { 199, -9 }, status = { 123, -42 },
         charges = { x = 53, y = -26, w = 43, h = 8, dx = 48, dy = 0 },
     },
+    prism = {
+        width = 112, height = 112,
+        lightStages = {
+            { { art = "PrismaticShield.tga", tint = { 0.98, 0.48, 0.24 } } },
+            { { art = "PrismaticShield.tga", tint = { 0.31, 0.75, 1 } } },
+            { { art = "PrismaticShield.tga", tint = { 1, 0.92, 0.51 } },
+                { texture = starlight, size = 43, y = 10, tint = { 1, 0.80, 0.32, 0.78 }, glow = true } },
+        },
+    },
+    lantern = {
+        width = 122, height = 122,
+        lightStages = {
+            { { art = "LanternEmber.tga", tint = { 0.43, 0.41, 0.46 } } },
+            { { art = "LanternKindled.tga", tint = { 0.77, 0.70, 0.65 } } },
+            { { art = "HolyLantern.tga" },
+                { texture = starlight, size = 56, y = 7, tint = { 1, 0.81, 0.45, 0.68 }, glow = true } },
+        },
+    },
+    constellation = {
+        width = 126, height = 126,
+        lightStages = {
+            { { art = "OathConstellation.tga", tint = { 0.68, 0.75, 0.91 } },
+                { texture = starlight, size = 33, x = -30, y = 28, tint = { 0.61, 0.87, 1, 1 }, glow = true } },
+            { { texture = starlight, size = 33, x = 32, y = 26, tint = { 0.83, 0.62, 1, 1 }, glow = true } },
+            { { texture = starlight, size = 42, y = -32, tint = { 1, 0.89, 0.49, 1 }, glow = true },
+                { texture = starlight, size = 36, y = 29, tint = { 0.75, 0.81, 1, 0.68 }, glow = true } },
+        },
+    },
 }
 
 local function SealTexture(seal)
@@ -73,6 +102,10 @@ local function PaintCharges(face, seal, count, nativeOnly)
 end
 
 local function RenderSwingTimer(now)
+    if layouts[display.style].lightStages then
+        swingBar:Hide()
+        return
+    end
     local timer = addon.swingTimer
     local flash = timer.at and now < timer.at + 0.4
     local counting = timer.endsAt and now < timer.endsAt + 0.4
@@ -136,9 +169,17 @@ function addon.Render()
     end
     local seal = state and state.seal or selectedSeal
     local count = state and state.count or 0
+    local layout = layouts[display.style]
+    local face = display.face
+    if layout.lightStages then
+        if state and state.nativeOnly and tracker.seal == seal then count = tracker.count or 0 end
+        count = math.max(1, count)
+        for stage, art in ipairs(face.lightStages) do art:SetShown(stage <= count) end
+        display:Show()
+        return
+    end
     local nativeOnly = state and state.nativeOnly == true
     local ready = count == addon.maxStacks
-    local face = display.face
     local changedSeal = face.spell ~= seal.spell
     if changedSeal then
         face.spell = seal.spell
@@ -157,7 +198,6 @@ function addon.Render()
     else
         face.count:SetText(count)
     end
-    local layout = layouts[display.style]
     if layout.art and ready then
         display.readySince = display.readySince or now
         local flash = math.max(0, 1 - (now - display.readySince) / 0.75)
@@ -185,6 +225,7 @@ local function Label(parent, style, text, x, y)
 end
 
 local function PaintBackground()
+    if layouts[display.style].lightStages then return end
     local alpha = addon.db.backgroundOpacity / 10
     display.face:SetBackdropColor(0.17, 0.18, 0.19, alpha)
     swingBar:SetBackdropColor(0.17, 0.18, 0.19, alpha)
@@ -212,6 +253,35 @@ local function SetIndicatorArt(art, layout)
     if not layout.art then return end
     art:SetTexture(media .. layout.art)
     art:SetTexCoord(unpack(layout.crop or { 0, 1, 0, 1 }))
+end
+
+local function DrawLightStage(parent, layers)
+    for _, layer in ipairs(layers) do
+        local texture = parent:CreateTexture(nil, layer.glow and "OVERLAY" or "ARTWORK")
+        texture:SetTexture(layer.texture or media .. layer.art)
+        if layer.size then
+            texture:SetSize(layer.size, layer.size)
+            texture:SetPoint("CENTER", parent, "CENTER", layer.x or 0, layer.y or 0)
+        else
+            texture:SetAllPoints(parent)
+        end
+        if layer.tint then texture:SetVertexColor(unpack(layer.tint)) end
+        if layer.glow then texture:SetBlendMode("ADD") end
+    end
+end
+
+local function CreateLightFace(layout)
+    local face = CreateFrame("Frame", nil, display)
+    face:SetAllPoints(display)
+    face.lightStages = {}
+    for stage, layers in ipairs(layout.lightStages) do
+        local art = CreateFrame("Frame", nil, face)
+        art:SetAllPoints(face)
+        art:SetFrameLevel(face:GetFrameLevel() + stage)
+        DrawLightStage(art, layers)
+        face.lightStages[stage] = art
+    end
+    return face
 end
 
 local function CreateFace(layout, parent, native)
@@ -279,10 +349,15 @@ local function CreateFace(layout, parent, native)
 end
 
 local function LayoutSwingBar()
+    local layout = layouts[display.style]
+    if layout.lightStages then
+        swingBar:Hide()
+        return
+    end
     local face = display.face
     local above = addon.db.swingTimerPosition == "above"
     local height = addon.db.swingTimerThickness == "thick" and 9 or 4
-    swingBar:SetWidth(layouts[display.style].plate[1])
+    swingBar:SetWidth(layout.plate[1])
     swingBar:SetHeight(20 + height)
     swingBar.progress:SetHeight(height)
     swingBar:ClearAllPoints()
@@ -300,7 +375,9 @@ local function ApplyStyle()
     display.style = id
     display:SetSize(layout.width, layout.height)
     SetIndicatorArt(display.art, layout)
-    display.faces[id] = display.faces[id] or CreateFace(layout, display)
+    if not display.faces[id] then
+        display.faces[id] = layout.lightStages and CreateLightFace(layout) or CreateFace(layout, display)
+    end
     display.face = display.faces[id]
     display.face:Show()
     display.readySince = nil
@@ -532,8 +609,53 @@ local function BindBuffFace(button, layout)
     return face
 end
 
+local function AddEchoSlot(view, layout, spells, initialize, levelOffset)
+    local host = view.host
+    local container = CreateFrame("AuraContainer", nil, host, "CustomAuraContainerTemplate")
+    container:SetAllPoints(host)
+    if levelOffset then container:SetFrameLevel(host:GetFrameLevel() + levelOffset) end
+    container:SetUnit("player")
+    container:AddAuraSlot("echo", "HELPFUL", {
+        candidateFilters = { includeSpellIDs = spells },
+        initializeFrame = function(button)
+            button:SetSize(layout and layout.width or 76, layout and layout.height or 28)
+            button:SetPoint("CENTER", container, "CENTER")
+            if levelOffset then button:SetFrameLevel(container:GetFrameLevel() + 1) end
+            button:EnableMouse(false)
+            initialize(button)
+        end,
+    })
+    view.containers[#view.containers + 1] = container
+end
+
+local function BindLightThreshold(button, layers, stacks)
+    -- The client controls visibility. Only the artwork attached to this frame is visible.
+    local gate = CreateFrame("StatusBar", nil, button)
+    gate:SetAllPoints(button)
+    gate:SetStatusBarTexture(solid)
+    gate:SetStatusBarColor(0, 0, 0, 0)
+    DrawLightStage(gate, layers)
+    button:SetApplicationBar(gate, { minApplications = stacks, maxApplications = addon.maxStacks })
+end
+
 local function BuildBuffDisplay(view, layout)
     if not C_AuraContainerUtil then C_AddOns.LoadAddOn("Blizzard_AuraContainer") end
+    local spells = {}
+    for id in pairs(addon.sealByEcho) do spells[id] = true end
+    if layout and layout.lightStages then
+        local stages = layout.lightStages
+        AddEchoSlot(view, layout, spells, function(button)
+            DrawLightStage(button, stages[1])
+            BindLightThreshold(button, stages[2], 2)
+            view.hasSecondStage = true
+        end, 1)
+        AddEchoSlot(view, layout, spells, function(button)
+            BindLightThreshold(button, stages[3], 3)
+            view.hasThirdStage = true
+        end, 5)
+        return
+    end
+
     local formatter = C_StringUtil.CreateAbbreviatedNumberFormatter()
     if layout and C_StringUtil.CreateNumericRuleFormatter then
         local ruleFormatter = C_StringUtil.CreateNumericRuleFormatter()
@@ -544,33 +666,20 @@ local function BuildBuffDisplay(view, layout)
         })
         formatter = ruleFormatter
     end
-    local spells = {}
-    for id in pairs(addon.sealByEcho) do spells[id] = true end
-    local host = view.host
-    local container = CreateFrame("AuraContainer", nil, host, "CustomAuraContainerTemplate")
-    container:SetAllPoints(host)
-    container:SetUnit("player")
-    container:AddAuraSlot("echo", "HELPFUL", {
-        candidateFilters = { includeSpellIDs = spells },
-        initializeFrame = function(button)
-            button:SetSize(layout and layout.width or 76, layout and layout.height or 28)
-            button:SetPoint("CENTER", container, "CENTER")
-            button:EnableMouse(false)
-            local count
-            if layout then
-                view.face = BindBuffFace(button, layout)
-                count = view.face.count
-            else
-                local icon = button:CreateTexture(nil, "ARTWORK")
-                icon:SetPoint("LEFT")
-                icon:SetSize(24, 24)
-                button:SetIcon(icon)
-                count = Label(button, "GameFontHighlightLarge", "", 32, -5)
-            end
-            button:SetApplicationCount(count, { formatter = formatter })
-        end,
-    })
-    container:SetEnabled(true)
+    AddEchoSlot(view, layout, spells, function(button)
+        local count
+        if layout then
+            view.face = BindBuffFace(button, layout)
+            count = view.face.count
+        else
+            local icon = button:CreateTexture(nil, "ARTWORK")
+            icon:SetPoint("LEFT")
+            icon:SetSize(24, 24)
+            button:SetIcon(icon)
+            count = Label(button, "GameFontHighlightLarge", "", 32, -5)
+        end
+        button:SetApplicationCount(count, { formatter = formatter })
+    end)
 end
 
 local function CreateBuffDisplay(layout)
@@ -585,8 +694,18 @@ local function CreateBuffDisplay(layout)
     else
         host:SetPoint("TOP", UIParent, "TOP", 0, -90)
     end
-    local view = { host = host, showLive = true }
-    if pcall(BuildBuffDisplay, view, layout) and (not layout or view.face) then return view end
+    local view = { host = host, showLive = true, containers = {} }
+    if pcall(BuildBuffDisplay, view, layout)
+        and (not layout or view.face or (view.hasSecondStage and view.hasThirdStage)) then
+        return view
+    end
+end
+
+local function ShowBuffView(view, shown)
+    if not view or view.enabled == shown then return end
+    for _, container in ipairs(view.containers) do container:SetEnabled(shown) end
+    view.host:SetShown(shown)
+    view.enabled = shown
 end
 
 function addon.RefreshBuffDisplay()
@@ -595,35 +714,37 @@ function addon.RefreshBuffDisplay()
         addon.Render()
         return
     end
-    if addon.db.showBuffDisplay and not buffHost then
-        local badge = CreateBuffDisplay()
-        if badge then
-            buffHost = badge.host
-        else
+    local layout = layouts[display.style]
+    local showBadge = addon.db.showBuffDisplay and not layout.lightStages
+    if showBadge and not buffView then
+        buffView = CreateBuffDisplay()
+        if not buffView then
             addon.db.showBuffDisplay = false
             buffToggle:SetChecked(false)
             DEFAULT_CHAT_FRAME:AddMessage("AlexIra: o cliente não disponibilizou o visor nativo do buff.")
         end
     end
-    if buffHost then buffHost:SetShown(addon.db.showBuffDisplay) end
+    ShowBuffView(buffView, showBadge)
 
     local nextIndicator
     if addon.db.preferBuffCount then
         local id = display.style
         if nativeStyles[id] == nil then
-            nativeStyles[id] = CreateBuffDisplay(layouts[id]) or false
+            nativeStyles[id] = CreateBuffDisplay(layout) or false
             if not nativeStyles[id] then
                 DEFAULT_CHAT_FRAME:AddMessage("AlexIra: usando o indicador original até o visor nativo estar disponível.")
             end
         end
         nextIndicator = nativeStyles[id] or nil
     end
-    if nativeIndicator and nativeIndicator ~= nextIndicator then nativeIndicator.host:Hide() end
+    if nativeIndicator ~= nextIndicator then ShowBuffView(nativeIndicator, false) end
     nativeIndicator = nextIndicator
     if nativeIndicator then
         PositionIndicator(nativeIndicator.host)
-        nativeIndicator.face:SetBackdropColor(0.17, 0.18, 0.19, addon.db.backgroundOpacity / 10)
-        nativeIndicator.host:Show()
+        if nativeIndicator.face then
+            nativeIndicator.face:SetBackdropColor(0.17, 0.18, 0.19, addon.db.backgroundOpacity / 10)
+        end
+        ShowBuffView(nativeIndicator, true)
     end
     addon.Render()
 end

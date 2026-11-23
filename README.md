@@ -8,7 +8,7 @@ Indicador de Ira Desatada para paladinos no World of Warcraft: Forever 1.60.1. M
 2. Abra `/alex` ou selecione **AlexIra** no painel de complementos. O atalho `/alexira` também abre o menu.
 3. Clique no selo que quer configurar. Cada selo tem três menus de som independentes, um por acúmulo. Escolha entre 30 opções de som, com efeitos do jogo e sons como **Pato de borracha**, **Buzina de palhaço** e **Boing**, ou ative **Sem som**. Use **Testar** na linha de um acúmulo para ouvir a escolha e ver aquele estado do indicador.
 4. Marque **Mover indicador** para arrastá-lo. As escolhas e a posição são salvas por personagem.
-5. Em **Estilo do indicador**, escolha **Asas Douradas**, **Simples**, **Relicário**, **Vitral Sagrado**, **Fênix Dourada** ou **Martelo da Aurora**. Ajuste **Opacidade do fundo** de **1** (mais transparente) a **10** (opaco). O fundo cinza começa em **6**. O menu mostra uma prévia silenciosa ao mudar a aparência fora de uma contagem ativa.
+5. Em **Estilo do indicador**, escolha um painel com texto ou um dos três estilos ilustrados descritos abaixo. Nos painéis, ajuste **Opacidade do fundo** de **1** (mais transparente) a **10** (opaco). Use os botões **Testar** para conferir a aparência de cada acúmulo.
 6. A barra **Ataque branco** pisca quando o jogo registra seu ataque de mão principal, mesmo sem um Eco ativo. Ela mostra a previsão do próximo ataque e ajusta o tempo quando a velocidade da arma muda. No menu **Barra de ataque branco**, escolha **Acima** ou **Abaixo** do painel e a espessura **Grossa** ou **Fina**. Para ocultá-la, desmarque **Mostrar timer de ataque branco** em `/alex`.
 7. **Buff nativo no indicador** vem ligado. O painel principal usa o mesmo visor do WoW que atualiza o ícone, as stacks e o tempo do Eco no jogador. Para ativar o ícone pequeno no alto da tela, marque **Mostrar buff separado** em `/alex`. As mudanças do visor nativo são aplicadas fora de combate.
 8. **Som de 3 sem espera** escolhe se o som toca quando a estimativa chega a três ou aguarda a confirmação ou o fim da janela de verificação.
@@ -19,6 +19,16 @@ Por padrão, o alerta de proc do Choque Sagrado toca ao atingir três acúmulos.
 Os Ecos de Comando, Retidão, Sabedoria, Luz, Justiça e Fúria têm alertas independentes. O Eco fica visível até ser consumido ou expirar. Ao trocar o selo ativo, o contador continua mostrando o Eco que você armazenou.
 
 O visor nativo mostra o Eco enquanto a aura estiver ativa, mesmo quando as stacks estão protegidas para o código do addon. Se o visor nativo estiver indisponível ou for desligado, o painel pode mostrar **Estimativa**. Os sons usam a leitura da aura quando disponível para o addon. Com **Som de 3 sem espera** ligado e a leitura protegida, uma esquiva ou um erro pode fazer o som tocar cedo.
+
+## Atualização 0.5.0
+
+Três estilos mostram as stacks só com arte e luz. Neles, o timer e o ícone separado ficam ocultos. Suas preferências desses dois visores são reaplicadas ao escolher um painel com texto.
+
+- **Escudo Prismático** muda de cobre para azul e depois para dourado.
+- **Farol Sagrado** começa tênue e ganha brilho e nitidez a cada stack.
+- **Constelação do Juramento** acende uma estrela a cada stack.
+
+Com **Buff nativo no indicador** ligado, o WoW controla as fases de luz a partir do Eco. Os alertas de som continuam configuráveis por selo e stack.
 
 ## Atualização 0.4.3
 
