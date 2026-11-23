@@ -47,11 +47,13 @@ local layouts = {
     },
     prism = {
         width = 112, height = 112,
+        sealIcon = true,
         lightStages = {
-            { { art = "PrismaticShield.tga", tint = { 0.98, 0.48, 0.24 } } },
-            { { art = "PrismaticShield.tga", tint = { 0.31, 0.75, 1 } } },
-            { { art = "PrismaticShield.tga", tint = { 1, 0.92, 0.51 } },
-                { texture = starlight, size = 43, y = 10, tint = { 1, 0.80, 0.32, 0.78 }, glow = true } },
+            { { art = "PrismaticShield.tga", tint = { 0.34, 0.95, 0.39 }, alternateTint = { 0.98, 0.48, 0.24 } } },
+            { { art = "PrismaticShield.tga", tint = { 1, 0.83, 0.23 }, alternateTint = { 0.31, 0.75, 1 } } },
+            { { art = "PrismaticShield.tga", tint = { 1, 0.25, 0.20 }, alternateTint = { 1, 0.92, 0.51 } },
+                { texture = starlight, size = 43, y = 10, tint = { 1, 0.37, 0.25, 0.78 },
+                    alternateTint = { 1, 0.80, 0.32, 0.78 }, glow = true } },
         },
     },
     lantern = {
@@ -175,6 +177,13 @@ function addon.Render()
         if state and state.nativeOnly and tracker.seal == seal then count = tracker.count or 0 end
         count = math.max(1, count)
         for stage, art in ipairs(face.lightStages) do art:SetShown(stage <= count) end
+        if face.sealIcon then
+            if face.spell ~= seal.spell then
+                face.spell = seal.spell
+                face.sealIcon:SetTexture(SealTexture(seal))
+            end
+            face.sealIcon:SetShown(addon.db.showPrismSeal)
+        end
         display:Show()
         return
     end
@@ -255,7 +264,17 @@ local function SetIndicatorArt(art, layout)
     art:SetTexCoord(unpack(layout.crop or { 0, 1, 0, 1 }))
 end
 
-local function DrawLightStage(parent, layers)
+local function ApplyLightTint(texture, layer)
+    local tint = layer.tint
+    if layer.alternateTint and not addon.db.prismTrafficColors then tint = layer.alternateTint end
+    if tint then texture:SetVertexColor(unpack(tint)) end
+end
+
+local function RefreshLightTints(textures)
+    for _, entry in ipairs(textures) do ApplyLightTint(entry.texture, entry.layer) end
+end
+
+local function DrawLightStage(parent, layers, tintUpdates)
     for _, layer in ipairs(layers) do
         local texture = parent:CreateTexture(nil, layer.glow and "OVERLAY" or "ARTWORK")
         texture:SetTexture(layer.texture or media .. layer.art)
@@ -265,22 +284,36 @@ local function DrawLightStage(parent, layers)
         else
             texture:SetAllPoints(parent)
         end
-        if layer.tint then texture:SetVertexColor(unpack(layer.tint)) end
+        ApplyLightTint(texture, layer)
+        if layer.alternateTint then tintUpdates[#tintUpdates + 1] = { texture = texture, layer = layer } end
         if layer.glow then texture:SetBlendMode("ADD") end
     end
+end
+
+local function CreateLightSealIcon(parent)
+    local layer = CreateFrame("Frame", nil, parent)
+    layer:SetAllPoints(parent)
+    layer:SetFrameLevel(parent:GetFrameLevel() + addon.maxStacks + 1)
+    local icon = layer:CreateTexture(nil, "OVERLAY")
+    icon:SetSize(20, 20)
+    icon:SetPoint("CENTER", layer, "CENTER", 0, 12)
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    return icon, layer
 end
 
 local function CreateLightFace(layout)
     local face = CreateFrame("Frame", nil, display)
     face:SetAllPoints(display)
     face.lightStages = {}
+    face.lightTints = {}
     for stage, layers in ipairs(layout.lightStages) do
         local art = CreateFrame("Frame", nil, face)
         art:SetAllPoints(face)
         art:SetFrameLevel(face:GetFrameLevel() + stage)
-        DrawLightStage(art, layers)
+        DrawLightStage(art, layers, face.lightTints)
         face.lightStages[stage] = art
     end
+    if layout.sealIcon then face.sealIcon = CreateLightSealIcon(face) end
     return face
 end
 
@@ -512,6 +545,21 @@ local function BuildStyleOption(panel)
                 PreviewAppearance()
             end, style.id)
         end
+        if addon.db.indicatorStyle == "prism" then
+            menu:CreateDivider()
+            local function AddOption(label, key)
+                local option = menu:CreateCheckbox(label, function()
+                    return addon.db[key]
+                end, function()
+                    addon.db[key] = not addon.db[key]
+                    addon.RefreshBuffDisplay()
+                    PreviewAppearance()
+                end)
+                option:SetSelectionIgnored()
+            end
+            AddOption("Ícone do selo no escudo", "showPrismSeal")
+            AddOption("Cores de semáforo", "prismTrafficColors")
+        end
     end)
 end
 
@@ -628,13 +676,13 @@ local function AddEchoSlot(view, layout, spells, initialize, levelOffset)
     view.containers[#view.containers + 1] = container
 end
 
-local function BindLightThreshold(button, layers, stacks)
+local function BindLightThreshold(button, layers, stacks, tintUpdates)
     -- The client controls visibility. Only the artwork attached to this frame is visible.
     local gate = CreateFrame("StatusBar", nil, button)
     gate:SetAllPoints(button)
     gate:SetStatusBarTexture(solid)
     gate:SetStatusBarColor(0, 0, 0, 0)
-    DrawLightStage(gate, layers)
+    DrawLightStage(gate, layers, tintUpdates)
     button:SetApplicationBar(gate, { minApplications = stacks, maxApplications = addon.maxStacks })
 end
 
@@ -644,13 +692,19 @@ local function BuildBuffDisplay(view, layout)
     for id in pairs(addon.sealByEcho) do spells[id] = true end
     if layout and layout.lightStages then
         local stages = layout.lightStages
+        view.lightTints = {}
         AddEchoSlot(view, layout, spells, function(button)
-            DrawLightStage(button, stages[1])
-            BindLightThreshold(button, stages[2], 2)
+            DrawLightStage(button, stages[1], view.lightTints)
+            BindLightThreshold(button, stages[2], 2, view.lightTints)
             view.hasSecondStage = true
         end, 1)
         AddEchoSlot(view, layout, spells, function(button)
-            BindLightThreshold(button, stages[3], 3)
+            BindLightThreshold(button, stages[3], 3, view.lightTints)
+            if layout.sealIcon then
+                local icon, layer = CreateLightSealIcon(button)
+                button:SetIcon(icon)
+                view.sealIconLayer = layer
+            end
             view.hasThirdStage = true
         end, 5)
         return
@@ -709,6 +763,7 @@ local function ShowBuffView(view, shown)
 end
 
 function addon.RefreshBuffDisplay()
+    if display.face.lightTints then RefreshLightTints(display.face.lightTints) end
     if not buffToggle then return end
     if addon.Public(InCombatLockdown()) ~= false then
         addon.Render()
@@ -744,6 +799,10 @@ function addon.RefreshBuffDisplay()
         if nativeIndicator.face then
             nativeIndicator.face:SetBackdropColor(0.17, 0.18, 0.19, addon.db.backgroundOpacity / 10)
         end
+        if nativeIndicator.sealIconLayer then
+            nativeIndicator.sealIconLayer:SetShown(addon.db.showPrismSeal)
+        end
+        if nativeIndicator.lightTints then RefreshLightTints(nativeIndicator.lightTints) end
         ShowBuffView(nativeIndicator, true)
     end
     addon.Render()

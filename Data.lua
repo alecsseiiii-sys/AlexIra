@@ -111,6 +111,8 @@ function addon.InitializeSettings()
     AlexIraDB.swingTimerPosition = AlexIraDB.swingTimerPosition == "below" and "below" or "above"
     AlexIraDB.swingTimerThickness = AlexIraDB.swingTimerThickness == "thin" and "thin" or "thick"
     AlexIraDB.showBuffDisplay = AlexIraDB.showBuffDisplay == true
+    AlexIraDB.showPrismSeal = AlexIraDB.showPrismSeal ~= false
+    AlexIraDB.prismTrafficColors = AlexIraDB.prismTrafficColors ~= false
     AlexIraDB.preferBuffCount = AlexIraDB.preferBuffCount ~= false
     AlexIraDB.instantMaxAlert = AlexIraDB.instantMaxAlert ~= false
     local volume = AlexIraDB.alertVolume
