@@ -105,6 +105,8 @@ function addon.InitializeSettings()
     AlexIraDB.backgroundOpacity = type(opacity) == "number" and opacity >= 1 and opacity <= 10
         and math.floor(opacity + 0.5) or 6
     AlexIraDB.showSwingTimer = AlexIraDB.showSwingTimer ~= false
+    AlexIraDB.swingTimerPosition = AlexIraDB.swingTimerPosition == "below" and "below" or "above"
+    AlexIraDB.swingTimerThickness = AlexIraDB.swingTimerThickness == "thin" and "thin" or "thick"
     AlexIraDB.showBuffDisplay = AlexIraDB.showBuffDisplay == true
     AlexIraDB.preferBuffCount = AlexIraDB.preferBuffCount ~= false
     AlexIraDB.instantMaxAlert = AlexIraDB.instantMaxAlert ~= false

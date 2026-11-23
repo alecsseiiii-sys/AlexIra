@@ -278,6 +278,21 @@ local function CreateFace(layout, parent, native)
     return face
 end
 
+local function LayoutSwingBar()
+    local face = display.face
+    local above = addon.db.swingTimerPosition == "above"
+    local height = addon.db.swingTimerThickness == "thick" and 9 or 4
+    swingBar:SetWidth(layouts[display.style].plate[1])
+    swingBar:SetHeight(20 + height)
+    swingBar.progress:SetHeight(height)
+    swingBar:ClearAllPoints()
+    if above then
+        swingBar:SetPoint("BOTTOM", face, "TOP", 0, 4)
+    else
+        swingBar:SetPoint("TOP", face, "BOTTOM", 0, -4)
+    end
+end
+
 local function ApplyStyle()
     local id = addon.db.indicatorStyle
     local layout = layouts[id]
@@ -289,15 +304,12 @@ local function ApplyStyle()
     display.face = display.faces[id]
     display.face:Show()
     display.readySince = nil
-    swingBar:SetWidth(layout.plate[1])
-    swingBar:ClearAllPoints()
-    swingBar:SetPoint("TOP", display.face, "BOTTOM", 0, -4)
+    LayoutSwingBar()
     PaintBackground()
 end
 
 local function BuildSwingBar()
     swingBar = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    swingBar:SetHeight(24)
     swingBar:SetClampedToScreen(true)
     swingBar:SetBackdrop({ bgFile = solid, edgeFile = solid, edgeSize = 1 })
     swingBar.title = Label(swingBar, "GameFontHighlightSmall", "Ataque branco", 7, -4)
@@ -307,7 +319,6 @@ local function BuildSwingBar()
     local bar = CreateFrame("StatusBar", nil, swingBar)
     bar:SetPoint("BOTTOMLEFT", 6, 4)
     bar:SetPoint("BOTTOMRIGHT", -6, 4)
-    bar:SetHeight(4)
     bar:SetStatusBarTexture(solid)
     bar:SetStatusBarColor(0.89, 0.62, 0.26)
     bar:SetMinMaxValues(0, 1)
@@ -385,6 +396,28 @@ local function PreviewAppearance()
         preview = { seal = selectedSeal, count = addon.maxStacks, expires = GetTime() + 4, appearance = true }
     end
     addon.Render()
+end
+
+local function BuildSwingAppearance(panel)
+    local dropdown = Dropdown(panel, 177, 245, -20)
+    dropdown:OverrideText("Barra de ataque branco")
+    dropdown:SetupMenu(function(_, menu)
+        local function AddChoice(label, setting, value)
+            menu:CreateRadio(label, function()
+                return addon.db[setting] == value
+            end, function()
+                addon.db[setting] = value
+                LayoutSwingBar()
+                if addon.db.showSwingTimer then PreviewAppearance() end
+            end)
+        end
+        menu:CreateTitle("Posição")
+        AddChoice("Acima", "swingTimerPosition", "above")
+        AddChoice("Abaixo", "swingTimerPosition", "below")
+        menu:CreateTitle("Espessura")
+        AddChoice("Grossa", "swingTimerThickness", "thick")
+        AddChoice("Fina", "swingTimerThickness", "thin")
+    end)
 end
 
 local function BuildStyleOption(panel)
@@ -611,6 +644,7 @@ local function BuildOptions(isPaladin)
     local panel = CreateFrame("Frame")
     Label(panel, "GameFontNormalHuge", "AlexIra", 24, -22)
     Label(panel, "GameFontHighlight", "Selecione um selo para configurar seus três alertas.", 24, -58)
+    BuildSwingAppearance(panel)
     BuildVolumeOption(panel)
 
     local sealButtons, soundMenus = {}, {}
