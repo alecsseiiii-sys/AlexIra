@@ -1,7 +1,8 @@
 local _, addon = ...
 
 local display, swingBar, selectedSeal, optionsID, preview
-local buffHost, buffToggle
+local buffHost, buffToggle, nativeIndicator
+local nativeStyles = {}
 local moving = false
 local solid = "Interface\\Buttons\\WHITE8X8"
 local media = "Interface\\AddOns\\AlexIra\\Media\\"
@@ -110,6 +111,17 @@ function addon.Render()
         preview = nil
     end
     RenderSwingTimer(now)
+    if nativeIndicator then
+        local showLive = not (preview or moving)
+        if nativeIndicator.showLive ~= showLive
+            and pcall(nativeIndicator.host.SetAlpha, nativeIndicator.host, showLive and 1 or 0) then
+            nativeIndicator.showLive = showLive
+        end
+        if nativeIndicator.showLive then
+            display:Hide()
+            return
+        end
+    end
     local state = preview or (live.seal and live)
     if not state and not moving then
         display.readySince = nil
@@ -178,14 +190,32 @@ local function PaintBackground()
     swingBar:SetBackdropColor(0.17, 0.18, 0.19, alpha)
 end
 
-local function ResetPosition()
-    addon.db.position = nil
-    display:ClearAllPoints()
-    display:SetPoint("CENTER", UIParent, "CENTER", 0, -154)
+local function PositionIndicator(frame)
+    local position = addon.db.position
+    frame:ClearAllPoints()
+    if type(position) == "table" and anchors[position[1]] and anchors[position[2]]
+        and type(position[3]) == "number" and type(position[4]) == "number" then
+        frame:SetPoint(position[1], UIParent, position[2], position[3], position[4])
+    else
+        frame:SetPoint("CENTER", UIParent, "CENTER", 0, -154)
+    end
 end
 
-local function CreateFace(layout)
-    local face = CreateFrame("Frame", nil, display, "BackdropTemplate")
+local function ResetPosition()
+    addon.db.position = nil
+    PositionIndicator(display)
+    addon.RefreshBuffDisplay()
+end
+
+local function SetIndicatorArt(art, layout)
+    art:SetShown(layout.art ~= nil)
+    if not layout.art then return end
+    art:SetTexture(media .. layout.art)
+    art:SetTexCoord(unpack(layout.crop or { 0, 1, 0, 1 }))
+end
+
+local function CreateFace(layout, parent, native)
+    local face = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     local width, height, offset = unpack(layout.plate)
     face:SetSize(width, height)
     face:SetPoint("CENTER", 0, offset)
@@ -221,7 +251,7 @@ local function CreateFace(layout)
     face.charges = {}
 
     local cells = layout.charges
-    if cells then
+    if cells and not native then
         for index = 1, addon.maxStacks do
             local border = face:CreateTexture(nil, "BORDER")
             border:SetColorTexture(0.37, 0.26, 0.14, 1)
@@ -254,12 +284,8 @@ local function ApplyStyle()
     if display.face then display.face:Hide() end
     display.style = id
     display:SetSize(layout.width, layout.height)
-    display.art:SetShown(layout.art ~= nil)
-    if layout.art then
-        display.art:SetTexture(media .. layout.art)
-        display.art:SetTexCoord(unpack(layout.crop or { 0, 1, 0, 1 }))
-    end
-    display.faces[id] = display.faces[id] or CreateFace(layout)
+    SetIndicatorArt(display.art, layout)
+    display.faces[id] = display.faces[id] or CreateFace(layout, display)
     display.face = display.faces[id]
     display.face:Show()
     display.readySince = nil
@@ -319,14 +345,9 @@ local function BuildDisplay()
         self:SetUserPlaced(false)
         local point, _, relativePoint, x, y = self:GetPoint()
         addon.db.position = { point, relativePoint, x, y }
+        addon.RefreshBuffDisplay()
     end)
-    local position = addon.db.position
-    if type(position) == "table" and anchors[position[1]] and anchors[position[2]]
-        and type(position[3]) == "number" and type(position[4]) == "number" then
-        display:SetPoint(position[1], UIParent, position[2], position[3], position[4])
-    else
-        ResetPosition()
-    end
+    PositionIndicator(display)
 
     display.art = display:CreateTexture(nil, "BACKGROUND")
     display.art:SetAllPoints(display)
@@ -377,6 +398,7 @@ local function BuildStyleOption(panel)
                 if addon.db.indicatorStyle == id then return end
                 addon.db.indicatorStyle = id
                 ApplyStyle()
+                addon.RefreshBuffDisplay()
                 PreviewAppearance()
             end, style.id)
         end
@@ -413,52 +435,150 @@ local function BuildOpacityOption(panel)
         addon.db.backgroundOpacity = value
         valueLabel:SetText(value .. " / 10")
         PaintBackground()
+        addon.RefreshBuffDisplay()
         PreviewAppearance()
     end)
 end
 
-local function BuildBuffDisplay(host)
+local function BindBuffCharges(button, face, cells)
+    if not cells then return end
+    local divisions = addon.maxStacks
+    local width = cells.w + (divisions - 1) * cells.dx
+    local height = cells.h + (divisions - 1) * cells.dy
+    local vertical = cells.dy > 0
+    local bar = CreateFrame("StatusBar", nil, face)
+    bar:SetPoint("TOPLEFT", face, "TOPLEFT", cells.x, cells.y + (divisions - 1) * cells.dy)
+    bar:SetSize(width, height)
+    bar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
+    bar:SetStatusBarTexture(solid)
+    bar:SetStatusBarColor(0.92, 0.67, 0.30)
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetAllPoints()
+    track:SetColorTexture(0.23, 0.16, 0.09, 0.9)
+    for index = 1, divisions - 1 do
+        local divider = bar:CreateTexture(nil, "OVERLAY")
+        divider:SetColorTexture(0.13, 0.09, 0.05)
+        if vertical then
+            divider:SetSize(width, 2)
+            divider:SetPoint("CENTER", bar, "BOTTOM", 0, index * height / divisions)
+        else
+            divider:SetSize(2, height)
+            divider:SetPoint("CENTER", bar, "LEFT", index * width / divisions, 0)
+        end
+    end
+    if not pcall(button.SetApplicationBar, button, bar, { minApplications = 0, maxApplications = divisions }) then
+        bar:Hide()
+    end
+end
+
+local function BindBuffFace(button, layout)
+    local art = button:CreateTexture(nil, "BACKGROUND")
+    art:SetAllPoints(button)
+    SetIndicatorArt(art, layout)
+    art:SetAlpha(0.79)
+    local face = CreateFace(layout, button, true)
+    face:SetBackdropBorderColor(0.50, 0.36, 0.19)
+    button:SetIcon(face.icon)
+    if not pcall(button.SetSpellName, button, face.title) then face.title:SetText("Eco do selo") end
+    if not pcall(button.SetDurationText, button, face.status) then face.status:SetText("Buff") end
+    BindBuffCharges(button, face, layout.charges)
+    return face
+end
+
+local function BuildBuffDisplay(view, layout)
     if not C_AuraContainerUtil then C_AddOns.LoadAddOn("Blizzard_AuraContainer") end
     local formatter = C_StringUtil.CreateAbbreviatedNumberFormatter()
+    if layout and C_StringUtil.CreateNumericRuleFormatter then
+        local ruleFormatter = C_StringUtil.CreateNumericRuleFormatter()
+        ruleFormatter:SetBreakpoints({
+            { threshold = 0, format = "" },
+            { threshold = 1, format = "%d" },
+            { threshold = addon.maxStacks, format = "|cffffdc80%d|r" },
+        })
+        formatter = ruleFormatter
+    end
     local spells = {}
     for id in pairs(addon.sealByEcho) do spells[id] = true end
+    local host = view.host
     local container = CreateFrame("AuraContainer", nil, host, "CustomAuraContainerTemplate")
     container:SetAllPoints(host)
     container:SetUnit("player")
     container:AddAuraSlot("echo", "HELPFUL", {
         candidateFilters = { includeSpellIDs = spells },
         initializeFrame = function(button)
-            button:SetSize(76, 28)
+            button:SetSize(layout and layout.width or 76, layout and layout.height or 28)
             button:SetPoint("CENTER", container, "CENTER")
             button:EnableMouse(false)
-            local icon = button:CreateTexture(nil, "ARTWORK")
-            icon:SetPoint("LEFT")
-            icon:SetSize(24, 24)
-            button:SetIcon(icon)
-            local count = Label(button, "GameFontHighlightLarge", "", 32, -5)
+            local count
+            if layout then
+                view.face = BindBuffFace(button, layout)
+                count = view.face.count
+            else
+                local icon = button:CreateTexture(nil, "ARTWORK")
+                icon:SetPoint("LEFT")
+                icon:SetSize(24, 24)
+                button:SetIcon(icon)
+                count = Label(button, "GameFontHighlightLarge", "", 32, -5)
+            end
             button:SetApplicationCount(count, { formatter = formatter })
         end,
     })
     container:SetEnabled(true)
 end
 
-function addon.RefreshBuffDisplay()
-    if not buffToggle or (not buffHost and not addon.db.showBuffDisplay)
-        or addon.Public(InCombatLockdown()) ~= false then return end
-    if not buffHost then
-        local host = CreateFrame("Frame", nil, UIParent)
-        host:SetSize(76, 28)
+local function CreateBuffDisplay(layout)
+    -- Keep managed widgets away from the draggable frame and its anchor chain.
+    local name = not layout and "AlexIraBuffBadge" or nil
+    local host = CreateFrame("Frame", name, UIParent)
+    host:Hide()
+    host:SetSize(layout and layout.width or 76, layout and layout.height or 28)
+    if layout then
+        host:SetClampedToScreen(true)
+        PositionIndicator(host)
+    else
         host:SetPoint("TOP", UIParent, "TOP", 0, -90)
-        host:Hide()
-        if not pcall(BuildBuffDisplay, host) then
+    end
+    local view = { host = host, showLive = true }
+    if pcall(BuildBuffDisplay, view, layout) and (not layout or view.face) then return view end
+end
+
+function addon.RefreshBuffDisplay()
+    if not buffToggle then return end
+    if addon.Public(InCombatLockdown()) ~= false then
+        addon.Render()
+        return
+    end
+    if addon.db.showBuffDisplay and not buffHost then
+        local badge = CreateBuffDisplay()
+        if badge then
+            buffHost = badge.host
+        else
             addon.db.showBuffDisplay = false
             buffToggle:SetChecked(false)
             DEFAULT_CHAT_FRAME:AddMessage("AlexIra: o cliente não disponibilizou o visor nativo do buff.")
-            return
         end
-        buffHost = host
     end
-    buffHost:SetShown(addon.db.showBuffDisplay)
+    if buffHost then buffHost:SetShown(addon.db.showBuffDisplay) end
+
+    local nextIndicator
+    if addon.db.preferBuffCount then
+        local id = display.style
+        if nativeStyles[id] == nil then
+            nativeStyles[id] = CreateBuffDisplay(layouts[id]) or false
+            if not nativeStyles[id] then
+                DEFAULT_CHAT_FRAME:AddMessage("AlexIra: usando o indicador original até o visor nativo estar disponível.")
+            end
+        end
+        nextIndicator = nativeStyles[id] or nil
+    end
+    if nativeIndicator and nativeIndicator ~= nextIndicator then nativeIndicator.host:Hide() end
+    nativeIndicator = nextIndicator
+    if nativeIndicator then
+        PositionIndicator(nativeIndicator.host)
+        nativeIndicator.face:SetBackdropColor(0.17, 0.18, 0.19, addon.db.backgroundOpacity / 10)
+        nativeIndicator.host:Show()
+    end
+    addon.Render()
 end
 
 local function CheckOption(panel, label, x, y, setting, onChange)
@@ -564,8 +684,8 @@ local function BuildOptions(isPaladin)
         end
     end)
     if isPaladin then
-        buffToggle = CheckOption(panel, "Mostrar buff nativo", 267, -429, "showBuffDisplay", addon.RefreshBuffDisplay)
-        CheckOption(panel, "Priorizar buff no indicador", 21, -460, "preferBuffCount", addon.Render)
+        buffToggle = CheckOption(panel, "Mostrar buff separado", 267, -429, "showBuffDisplay", addon.RefreshBuffDisplay)
+        CheckOption(panel, "Buff nativo no indicador", 21, -460, "preferBuffCount", addon.RefreshBuffDisplay)
         CheckOption(panel, "Som de 3 sem espera", 267, -460, "instantMaxAlert")
     end
     panel:SetScript("OnHide", function()

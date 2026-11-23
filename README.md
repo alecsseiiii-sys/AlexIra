@@ -10,14 +10,18 @@ Indicador de Ira Desatada para paladinos no World of Warcraft: Forever 1.60.1. M
 4. Marque **Mover indicador** para arrastá-lo. As escolhas e a posição são salvas por personagem.
 5. Em **Estilo do indicador**, escolha **Asas Douradas**, **Simples**, **Relicário**, **Vitral Sagrado**, **Fênix Dourada** ou **Martelo da Aurora**. Ajuste **Opacidade do fundo** de **1** (mais transparente) a **10** (opaco). O fundo cinza começa em **6**. O menu mostra uma prévia silenciosa ao mudar a aparência fora de uma contagem ativa.
 6. A barra **Ataque branco** pisca quando o jogo registra seu ataque de mão principal, mesmo sem um Eco ativo. Ela mostra a previsão do próximo ataque e ajusta o tempo quando a velocidade da arma muda. Para ocultá-la, desmarque **Mostrar timer de ataque branco** em `/alex`.
-7. Para conferir as stacks, marque **Mostrar buff nativo** fora de combate em `/alex`. O ícone do Eco e a contagem desenhada pelo jogo aparecem no alto da tela quando o buff está ativo e o cliente oferece esse visor.
-8. **Priorizar buff no indicador** e **Som de 3 sem espera** vêm ligados e podem ser desligados em `/alex`. A primeira opção escolhe se o indicador dá preferência ao número do buff ou à projeção do ataque. A segunda escolhe se o som toca quando a estimativa chega a três ou aguarda a confirmação ou o fim da janela de verificação.
+7. **Buff nativo no indicador** vem ligado. O painel principal usa o mesmo visor do WoW que atualiza o ícone, as stacks e o tempo do Eco no jogador. Para ativar o ícone pequeno no alto da tela, marque **Mostrar buff separado** em `/alex`. As mudanças do visor nativo são aplicadas fora de combate.
+8. **Som de 3 sem espera** escolhe se o som toca quando a estimativa chega a três ou aguarda a confirmação ou o fim da janela de verificação.
 
 Por padrão, o alerta de proc do Choque Sagrado toca ao atingir três acúmulos. Os dois primeiros ficam em silêncio. O alerta reforçado combina o som nativo (SoundKit 23287) com um toque original mais audível. O menu também oferece o proc nativo sozinho. Os alertas usam o canal principal do WoW.
 
 Os Ecos de Comando, Retidão, Sabedoria, Luz, Justiça e Fúria têm alertas independentes. O Eco fica visível até ser consumido ou expirar. Ao trocar o selo ativo, o contador continua mostrando o Eco que você armazenou.
 
-O indicador prioriza o número do Eco no personagem. Se o cliente proteger o número mas permitir exibi-lo, o número do buff aparece no indicador. Quando nenhum número do buff estiver disponível, o indicador usa **Estimativa**. O som de 3 stacks toca assim que o buff confirma o terceiro acúmulo ou assim que a projeção chega a três quando o Lua não pode ler a contagem. Nesse caso, uma esquiva ou um erro pode fazer o som tocar cedo.
+O visor nativo mostra o Eco enquanto a aura estiver ativa, mesmo quando as stacks estão protegidas para o código do addon. Se o visor nativo estiver indisponível ou for desligado, o painel pode mostrar **Estimativa**. Os sons usam a leitura da aura quando disponível para o addon. Com **Som de 3 sem espera** ligado e a leitura protegida, uma esquiva ou um erro pode fazer o som tocar cedo.
+
+## Atualização 0.4.1
+
+Os seis estilos do indicador principal passam a usar a contagem nativa do buff, a mesma do ícone pequeno do AlexIra. O WoW atualiza o selo, as stacks e a duração pelo Eco do jogador.
 
 ## Atualização 0.4.0
 
